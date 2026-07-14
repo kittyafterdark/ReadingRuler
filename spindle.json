@@ -1,11 +1,11 @@
 {
-  "version": "1.0.8",
+  "version": "1.0.9",
   "name": "Reading Ruler",
   "identifier": "reading_ruler",
   "author": "Kittylotus + ChatGPT",
   "github": "https://github.com/kittylotus/lumi-reading-ruler",
   "homepage": "https://github.com/kittylotus/lumi-reading-ruler",
-  "description": "A tiny frontend-only frosted glass reading ruler for Lumiverse chat pages. Drag the pill handle to expand or collapse the glass from the input area upward; it avoids side panels, supports CSS variables, and has mobile composer fallbacks. Mobile overlay yielding is opt-in to avoid WebView false positives.",
+  "description": "A tiny frontend-only frosted glass reading ruler for Lumiverse chat pages. Drag the pill handle to expand or collapse the glass from the input area upward; it avoids side panels, supports CSS variables, and has mobile composer fallbacks. Mobile has a small floating toggle button so the ruler can be hidden quickly when sidebars or panels get in the way.",
   "permissions": [],
   "entry_frontend": "dist/frontend.js",
   "minimum_lumiverse_version": "0.1.0"

@@ -116,7 +116,7 @@ Version 1.0.7 added a direct `data-component="InputArea"` composer fallback and 
 For debugging, inspect the injected node in DevTools: `#lumi-reading-ruler` has `data-reason="active"`, `data-reason="no-chat"`, or `data-reason="blocked-ui"`.
 
 
-## 1.0.8 mobile note
+## 1.0.9 mobile note
 
 Mobile overlay yielding is now opt-in. Some Android/WebView builds report normal Lumi chrome as open dialogs/portals, which made the ruler hide forever with `data-reason="blocked-ui"`. By default, mobile now prioritizes showing the ruler in chat. To re-enable experimental mobile UI yielding, add:
 
@@ -127,3 +127,36 @@ Mobile overlay yielding is now opt-in. Some Android/WebView builds report normal
 ```
 
 For debugging, `#lumi-reading-ruler` also exposes `data-blocker` when an element triggers UI yielding.
+
+## 1.0.9 mobile toggle note
+
+Mobile now gets a small floating toggle button. It appears on mobile chat screens and lets you hide/show the ruler without disabling the extension. This is useful when a sidebar, drawer, or settings panel opens over the chat and the frosted strip would otherwise cover too much of it.
+
+The toggle state persists in `localStorage` under:
+
+```text
+lumi-reading-ruler-mobile-enabled
+```
+
+Mobile toggle CSS variables:
+
+```css
+:root {
+  --lrr-mobile-toggle-enabled: 1;
+  --lrr-mobile-toggle-gap: 10px;
+  --lrr-mobile-toggle-right: 14px;
+  --lrr-toggle-z-index: 30;
+  --lrr-toggle-min-width: 56px;
+  --lrr-toggle-height: 34px;
+  --lrr-toggle-padding: 0 11px;
+  --lrr-toggle-radius: 999px;
+  --lrr-toggle-background: rgba(31, 29, 40, 0.76);
+  --lrr-toggle-off-background: rgba(18, 17, 24, 0.74);
+  --lrr-toggle-color: rgba(248, 245, 255, 0.92);
+  --lrr-toggle-off-color: rgba(248, 245, 255, 0.68);
+  --lrr-toggle-label-on: 'Ruler';
+  --lrr-toggle-label-off: 'Ruler';
+}
+```
+
+Set `--lrr-mobile-toggle-enabled: 0;` to remove the mobile toggle entirely.

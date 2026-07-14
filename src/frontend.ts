@@ -1,7 +1,9 @@
 import type { SpindleFrontendContext } from 'lumiverse-spindle-types'
 
 const ROOT_ID = 'lumi-reading-ruler'
+const TOGGLE_ID = 'lumi-reading-ruler-toggle'
 const STORAGE_KEY = 'lumi-reading-ruler-v3-height'
+const STORAGE_MOBILE_ENABLED_KEY = 'lumi-reading-ruler-mobile-enabled'
 const GLOBAL_CLEANUP_KEY = '__lumiReadingRulerCleanup'
 
 const DEFAULT_HEIGHT = 84
@@ -16,6 +18,7 @@ const MIN_RULER_WIDTH = 180
 const MAX_EDGE_PANEL_WIDTH = 680
 const MOBILE_BREAKPOINT = 760
 const MOBILE_YIELD_UI = 0
+const MOBILE_TOGGLE_ENABLED = 1
 
 type CleanupWindow = Window & {
   [GLOBAL_CLEANUP_KEY]?: () => void
@@ -83,6 +86,20 @@ function mobileBreakpoint(ruler?: HTMLElement | null): number {
 
 function mobileYieldUi(ruler?: HTMLElement | null): boolean {
   return readCssNumber('--lrr-mobile-yield-ui', MOBILE_YIELD_UI, ruler) >= 0.5
+}
+
+function mobileToggleAllowed(ruler?: HTMLElement | null): boolean {
+  return readCssNumber('--lrr-mobile-toggle-enabled', MOBILE_TOGGLE_ENABLED, ruler) >= 0.5
+}
+
+function readMobileEnabled(): boolean {
+  const raw = window.localStorage.getItem(STORAGE_MOBILE_ENABLED_KEY)
+  if (raw === null) return true
+  return raw !== '0' && raw !== 'false'
+}
+
+function saveMobileEnabled(value: boolean): void {
+  window.localStorage.setItem(STORAGE_MOBILE_ENABLED_KEY, value ? '1' : '0')
 }
 
 function isMobileViewport(ruler?: HTMLElement | null): boolean {
@@ -659,6 +676,60 @@ export function setup(ctx: SpindleFrontendContext) {
     #${ROOT_ID}[data-dragging="true"] .reading-ruler-handle::before {
       filter: var(--lrr-handle-drag-filter, brightness(1.14));
     }
+
+    #${TOGGLE_ID} {
+      position: fixed;
+      right: var(--lrr-mobile-toggle-right, 14px);
+      bottom: var(--lrr-runtime-toggle-bottom, calc(var(--lrr-mobile-toggle-bottom, 98px) + env(safe-area-inset-bottom, 0px)));
+      z-index: var(--lrr-toggle-z-index, 30);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      min-width: var(--lrr-toggle-min-width, 56px);
+      height: var(--lrr-toggle-height, 34px);
+      padding: var(--lrr-toggle-padding, 0 11px);
+      border-radius: var(--lrr-toggle-radius, 999px);
+      border: var(--lrr-toggle-border, 1px solid rgba(245, 239, 255, 0.24));
+      background: var(--lrr-toggle-background, rgba(31, 29, 40, 0.76));
+      color: var(--lrr-toggle-color, rgba(248, 245, 255, 0.92));
+      box-shadow: var(--lrr-toggle-shadow, 0 8px 22px rgba(0, 0, 0, 0.44), inset 0 1px 0 rgba(255, 255, 255, 0.10));
+      backdrop-filter: blur(var(--lrr-toggle-blur, 12px)) saturate(var(--lrr-toggle-saturate, 118%));
+      -webkit-backdrop-filter: blur(var(--lrr-toggle-blur, 12px)) saturate(var(--lrr-toggle-saturate, 118%));
+      font: var(--lrr-toggle-font, 600 11px/1 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+      letter-spacing: var(--lrr-toggle-letter-spacing, 0.04em);
+      text-transform: var(--lrr-toggle-text-transform, uppercase);
+      pointer-events: auto;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      opacity: var(--lrr-toggle-opacity, 0.92);
+      transform: translateY(6px) scale(0.98);
+      transition:
+        opacity 140ms ease,
+        transform 140ms ease,
+        background-color 140ms ease;
+    }
+
+    #${TOGGLE_ID}[data-visible="true"] {
+      display: flex;
+      transform: translateY(0) scale(1);
+    }
+
+    #${TOGGLE_ID}[data-enabled="false"] {
+      opacity: var(--lrr-toggle-off-opacity, 0.66);
+      background: var(--lrr-toggle-off-background, rgba(18, 17, 24, 0.74));
+      color: var(--lrr-toggle-off-color, rgba(248, 245, 255, 0.68));
+    }
+
+    #${TOGGLE_ID} .reading-ruler-toggle-label::before {
+      content: var(--lrr-toggle-label-on, 'Ruler');
+    }
+
+    #${TOGGLE_ID}[data-enabled="false"] .reading-ruler-toggle-label::before {
+      content: var(--lrr-toggle-label-off, 'Ruler');
+    }
+
   `)
 
   const wrapper = ctx.dom.inject(
@@ -666,13 +737,20 @@ export function setup(ctx: SpindleFrontendContext) {
     `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler"></button></div>`,
     'beforeend',
   )
+  const toggleWrapper = ctx.dom.inject(
+    'body',
+    `<button id="${TOGGLE_ID}" type="button" aria-label="Toggle reading ruler" aria-pressed="true"><span class="reading-ruler-toggle-label" aria-hidden="true"></span></button>`,
+    'beforeend',
+  )
 
   const ruler = document.getElementById(ROOT_ID) as HTMLElement | null
   const handle = ruler?.querySelector('.reading-ruler-handle') as HTMLElement | null
+  const toggle = document.getElementById(TOGGLE_ID) as HTMLButtonElement | null
 
-  if (!ruler || !handle) {
+  if (!ruler || !handle || !toggle) {
     removeStyle()
     ctx.dom.uninject(wrapper)
+    ctx.dom.uninject(toggleWrapper)
     return () => undefined
   }
 
@@ -682,6 +760,27 @@ export function setup(ctx: SpindleFrontendContext) {
   let startHeight = 0
   let lastBottomAnchor = initialBottom
   let syncFrame = 0
+  let mobileEnabled = readMobileEnabled()
+
+  const applyToggleState = (visible: boolean) => {
+    toggle.dataset.visible = visible ? 'true' : 'false'
+    toggle.dataset.enabled = mobileEnabled ? 'true' : 'false'
+    toggle.setAttribute('aria-pressed', mobileEnabled ? 'true' : 'false')
+    toggle.setAttribute('aria-label', mobileEnabled ? 'Hide reading ruler' : 'Show reading ruler')
+  }
+
+  const applyTogglePosition = (inputAnchor?: HTMLElement | null) => {
+    const anchorBottom = inputAnchor ? computeBottomAnchor(inputAnchor) : lastBottomAnchor
+    const bottom = Math.max(72, anchorBottom + readCssNumber('--lrr-mobile-toggle-gap', 10, ruler))
+    toggle.style.setProperty('--lrr-runtime-toggle-bottom', `${Math.round(bottom)}px`)
+  }
+
+  const setMobileEnabled = (next: boolean, persist = true) => {
+    mobileEnabled = next
+    if (persist) saveMobileEnabled(next)
+    applyToggleState(isMobileViewport(ruler) && mobileToggleAllowed(ruler))
+    scheduleSync()
+  }
 
   const applyHeight = (nextHeight: number, persist = true) => {
     const clamped = clampHeight(nextHeight, lastBottomAnchor, ruler)
@@ -707,10 +806,20 @@ export function setup(ctx: SpindleFrontendContext) {
     const inputAnchor = findInputAnchor()
     const mobile = isMobileViewport(ruler)
     const activeChat = isChatRoute() || inputAnchor !== null || looksLikeMobileChatScreen()
+    const showMobileToggle = mobile && activeChat && mobileToggleAllowed(ruler)
+
+    applyTogglePosition(inputAnchor)
+    applyToggleState(showMobileToggle)
 
     if (!activeChat) {
       ruler.dataset.active = 'false'
       ruler.dataset.reason = 'no-chat'
+      return
+    }
+
+    if (mobile && mobileToggleAllowed(ruler) && !mobileEnabled) {
+      ruler.dataset.active = 'false'
+      ruler.dataset.reason = 'mobile-disabled'
       return
     }
 
@@ -795,6 +904,12 @@ export function setup(ctx: SpindleFrontendContext) {
     scheduleSync()
   }
 
+  const toggleMobile = (event: Event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setMobileEnabled(!mobileEnabled)
+  }
+
   const observer = new MutationObserver(scheduleSync)
   observer.observe(document.body, {
     childList: true,
@@ -820,6 +935,8 @@ export function setup(ctx: SpindleFrontendContext) {
     window.addEventListener('touchend', endDrag as EventListener, { passive: false })
     window.addEventListener('touchcancel', endDrag as EventListener, { passive: false })
   }
+
+  toggle.addEventListener('click', toggleMobile)
 
   window.addEventListener('resize', onResize)
   window.addEventListener('orientationchange', onResize)
@@ -854,9 +971,11 @@ export function setup(ctx: SpindleFrontendContext) {
     window.removeEventListener('orientationchange', onResize)
     window.removeEventListener('popstate', scheduleSync)
     window.removeEventListener('hashchange', scheduleSync)
+    toggle.removeEventListener('click', toggleMobile)
 
     removeStyle()
     ctx.dom.uninject(wrapper)
+    ctx.dom.uninject(toggleWrapper)
     ctx.dom.cleanup()
 
     if (win[GLOBAL_CLEANUP_KEY] === cleanup) delete win[GLOBAL_CLEANUP_KEY]
