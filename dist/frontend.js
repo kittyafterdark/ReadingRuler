@@ -9,6 +9,8 @@ const INPUT_GAP = 8;
 const RULER_Z_INDEX = 24;
 const SIDE_INSET = 10;
 const SIDE_PANEL_GAP = 8;
+const MIN_RULER_WIDTH = 180;
+const MAX_EDGE_PANEL_WIDTH = 680;
 function viewportHeight() {
     return window.innerHeight || document.documentElement.clientHeight || 720;
 }
@@ -41,6 +43,14 @@ function sideInset(ruler) {
 }
 function sidePanelGap(ruler) {
     return readCssNumber('--lrr-side-panel-gap', SIDE_PANEL_GAP, ruler);
+}
+function minRulerWidth(ruler) {
+    return readCssNumber('--lrr-min-width', MIN_RULER_WIDTH, ruler);
+}
+function maxEdgePanelWidth(ruler) {
+    const cssValue = readCssNumber('--lrr-max-edge-panel-width', Number.NaN, ruler);
+    const defaultValue = Math.min(MAX_EDGE_PANEL_WIDTH, viewportWidth() * 0.48);
+    return Number.isFinite(cssValue) ? cssValue : defaultValue;
 }
 function zIndexThreshold() {
     return readCssNumber('--lrr-z-index', RULER_Z_INDEX);
@@ -216,18 +226,27 @@ function isProbablyEdgePanel(el, side, ruler, inputAnchor) {
     const role = (el.getAttribute('role') || '').toLowerCase();
     const position = style.position;
     const zIndex = Number.parseInt(style.zIndex, 10);
-    const touchesEdge = side === 'right' ? rect.right >= viewportWidth() - 4 : rect.left <= 4;
+    const vw = viewportWidth();
+    const vh = viewportHeight();
+    const touchesEdge = side === 'right' ? rect.right >= vw - 4 : rect.left <= 4;
     const substantialWidth = rect.width >= 42;
-    const substantialHeight = rect.height >= Math.min(160, viewportHeight() * 0.22);
+    const substantialHeight = rect.height >= Math.min(160, vh * 0.22);
     const floating = position === 'fixed' || position === 'absolute' || position === 'sticky';
     const highZ = Number.isFinite(zIndex) && zIndex >= zIndexThreshold();
     const namedLikePanel = /sidebar|side-bar|dock|drawer|sheet|panel|rail|nav|navigation|settings|extension|profile|loom|weaver|connect|browser|chars|character|persona|lore|memory|data/i.test(nameHint);
     const roleLikePanel = /dialog|navigation|complementary/.test(role);
-    const fullHeightRail = rect.height > viewportHeight() * 0.64;
-    return (touchesEdge &&
-        substantialWidth &&
-        substantialHeight &&
-        (floating || highZ || namedLikePanel || roleLikePanel || fullHeightRail));
+    const fullHeightRail = rect.height > vh * 0.64;
+    const nearOwnSide = side === 'right' ? rect.left >= vw * 0.38 : rect.right <= vw * 0.62;
+    const nearlyFullscreen = rect.left <= 4 && rect.right >= vw - 4;
+    const tooWideForPanel = rect.width > Math.min(maxEdgePanelWidth(ruler), vw * 0.52);
+    const narrowRail = rect.width <= 124 && fullHeightRail;
+    const mediumPanel = rect.width > 124 && (floating || highZ || namedLikePanel || roleLikePanel);
+    // Important: many Lumiverse app-shell/main-content wrappers touch the left edge and are
+    // full-height. Treating those as side panels squishes the ruler into the actual sidebar.
+    // Edge avoidance is only for narrow rails and plausible dock/drawer panels.
+    if (nearlyFullscreen || tooWideForPanel || !nearOwnSide)
+        return false;
+    return touchesEdge && substantialWidth && substantialHeight && (narrowRail || mediumPanel);
 }
 function edgePanelInsets(ruler, inputAnchor, bottomAnchor) {
     const height = Number.parseFloat(ruler.style.height) ||
@@ -278,8 +297,17 @@ function horizontalInsets(ruler, inputAnchor, bottomAnchor) {
         right = Math.max(right, Math.floor(viewportWidth() - rect.right));
     }
     const edgeInsets = edgePanelInsets(ruler, inputAnchor, bottomAnchor);
-    left = Math.max(left, edgeInsets.left);
-    right = Math.max(right, edgeInsets.right);
+    const maxPanelInset = maxEdgePanelWidth(ruler) + sidePanelGap(ruler);
+    left = Math.max(left, Math.min(edgeInsets.left, maxPanelInset));
+    right = Math.max(right, Math.min(edgeInsets.right, maxPanelInset));
+    const maxTotalInset = Math.max(0, viewportWidth() - minRulerWidth(ruler));
+    if (left + right > maxTotalInset) {
+        const overflow = left + right - maxTotalInset;
+        if (left > right)
+            left = Math.max(baseInset, left - overflow);
+        else
+            right = Math.max(baseInset, right - overflow);
+    }
     return { left: Math.round(left), right: Math.round(right) };
 }
 function shouldYieldToAppUi(ruler, inputAnchor) {

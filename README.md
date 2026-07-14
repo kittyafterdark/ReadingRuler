@@ -10,7 +10,7 @@ Tiny frontend-only Lumiverse extension that adds a frosted glass reading/censor 
 - Drag the pill handle downward to collapse it.
 - The body ignores pointer events so normal scrolling/tapping is not blocked.
 - The ruler yields to app UI: modals, dropdowns, and input popovers should appear above it or temporarily hide it.
-- The ruler also avoids edge-mounted side panels/dock panels by shrinking away from the left/right edge when one is visible.
+- The ruler also avoids edge-mounted side panels/dock panels by shrinking away from the left/right edge when one is visible. The edge-panel detector is conservative so it should not mistake the whole app shell for a panel.
 - The saved height persists in `localStorage` under `lumi-reading-ruler-v3-height`.
 
 ## CSS variables
@@ -38,6 +38,8 @@ Main layout / behavior variables:
   --lrr-top-margin: 34px;
   --lrr-side-inset: 10px;
   --lrr-side-panel-gap: 8px;
+  --lrr-min-width: 180px;
+  --lrr-max-edge-panel-width: 680px;
 }
 ```
 
