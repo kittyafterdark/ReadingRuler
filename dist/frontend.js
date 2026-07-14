@@ -102,31 +102,30 @@ function isVisibleElement(el) {
         style.visibility !== 'hidden' &&
         style.opacity !== '0');
 }
-function isChatRoute() {
-    const routeText = [
-        window.location.pathname,
-        window.location.hash,
-        window.location.search,
-        window.location.href,
-    ]
+function routeText() {
+    // Do not include window.location.href here. The production domain is
+    // lumiverse.chat, so a naive /chat/ test on href makes every screen look
+    // like a chat screen. Ask me how I know.
+    return [window.location.pathname, window.location.hash, window.location.search]
         .join(' ')
         .toLowerCase();
-    return /(?:^|[#/?&])chats?(?:\/|%2f)[^\s?#&]+/.test(routeText);
+}
+function isChatRoute() {
+    return /(?:^|[#/?&])chats?(?:\/|%2f)[^\s?#&]+/.test(routeText());
 }
 function looksLikeMobileChatScreen() {
     if (!isMobileViewport())
         return false;
-    const routeText = [window.location.pathname, window.location.hash, window.location.search, window.location.href]
-        .join(' ')
-        .toLowerCase();
-    if (/chat|conversation|thread/.test(routeText))
+    if (isChatRoute())
         return true;
     if (document.querySelector('[data-component="InputArea"]'))
         return true;
     if (document.querySelector('[placeholder*="message" i], [aria-label*="message" i]'))
         return true;
-    const bodyText = document.body?.innerText || '';
-    return /type a message|send message|regenerate|continue|greetings/i.test(bodyText);
+    // No body-text fallback. The landing page says "Continue your story",
+    // which previously made the home grid count as chat and spawned the ruler
+    // over character cards.
+    return false;
 }
 function findInputShellCandidates() {
     const selectors = [
@@ -633,7 +632,7 @@ export function setup(ctx) {
     const syncVisibility = () => {
         const inputAnchor = findInputAnchor();
         const mobile = isMobileViewport(ruler);
-        const activeChat = isChatRoute() || inputAnchor !== null || looksLikeMobileChatScreen();
+        const activeChat = isChatRoute() || (inputAnchor !== null && looksLikeMobileChatScreen());
         if (!activeChat) {
             ruler.dataset.active = 'false';
             ruler.dataset.reason = 'no-chat';

@@ -148,3 +148,8 @@ lumi-reading-ruler-enabled
 
 This keeps settings, sidebars, drawers, and other app UI from being covered by a second floating control.
 
+
+
+## 1.1.1 route guard note
+
+Version 1.1.1 removes the broad mobile body-text fallback and stops checking `window.location.href` for chat detection. The live domain is `lumiverse.chat`, so checking the full URL made the home/continue screen look like a chat screen. The ruler now activates only on `/chat/:chatId`-style routes or when a real Lumi message composer is visible on mobile.
