@@ -11,7 +11,10 @@ Tiny frontend-only Lumiverse extension that adds a frosted glass reading/censor 
 - The body ignores pointer events so normal scrolling/tapping is not blocked.
 - The ruler yields to app UI: modals, dropdowns, and input popovers should appear above it or temporarily hide it.
 - On desktop, the ruler avoids edge-mounted side panels/dock panels by shrinking away from the left/right edge when one is visible. On mobile, side-panel avoidance is disabled and overlay hiding is conservative, so app chrome should not suppress the ruler forever.
+- Adds a native Lumiverse Input Bar Action in the composer Extras popover: **Show Ruler** / **Hide Ruler**. This avoids adding any extra floating button over sidebars/settings.
+- Tracks Lumiverse drawer/settings state through `ctx.ui.events` when available and hides the ruler while those panels are open.
 - The saved height persists in `localStorage` under `lumi-reading-ruler-v3-height`.
+- The enabled/disabled state persists in `localStorage` under `lumi-reading-ruler-enabled`.
 
 ## CSS variables
 
@@ -128,35 +131,20 @@ Mobile overlay yielding is now opt-in. Some Android/WebView builds report normal
 
 For debugging, `#lumi-reading-ruler` also exposes `data-blocker` when an element triggers UI yielding.
 
-## 1.0.9 mobile toggle note
+## 1.1.0 input action note
 
-Mobile now gets a small floating toggle button. It appears on mobile chat screens and lets you hide/show the ruler without disabling the extension. This is useful when a sidebar, drawer, or settings panel opens over the chat and the frosted strip would otherwise cover too much of it.
-
-The toggle state persists in `localStorage` under:
+The old mobile floating toggle button has been removed. Version 1.1.0 uses Lumiverse's native Input Bar Action API instead, so the toggle lives inside the chat input bar's Extras popover. The action label updates between:
 
 ```text
-lumi-reading-ruler-mobile-enabled
+Show Ruler
+Hide Ruler
 ```
 
-Mobile toggle CSS variables:
+The visible state persists in:
 
-```css
-:root {
-  --lrr-mobile-toggle-enabled: 1;
-  --lrr-mobile-toggle-gap: 10px;
-  --lrr-mobile-toggle-right: 14px;
-  --lrr-toggle-z-index: 30;
-  --lrr-toggle-min-width: 56px;
-  --lrr-toggle-height: 34px;
-  --lrr-toggle-padding: 0 11px;
-  --lrr-toggle-radius: 999px;
-  --lrr-toggle-background: rgba(31, 29, 40, 0.76);
-  --lrr-toggle-off-background: rgba(18, 17, 24, 0.74);
-  --lrr-toggle-color: rgba(248, 245, 255, 0.92);
-  --lrr-toggle-off-color: rgba(248, 245, 255, 0.68);
-  --lrr-toggle-label-on: 'Ruler';
-  --lrr-toggle-label-off: 'Ruler';
-}
+```text
+lumi-reading-ruler-enabled
 ```
 
-Set `--lrr-mobile-toggle-enabled: 0;` to remove the mobile toggle entirely.
+This keeps settings, sidebars, drawers, and other app UI from being covered by a second floating control.
+
