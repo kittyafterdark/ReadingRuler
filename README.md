@@ -4,13 +4,13 @@ Tiny frontend-only Lumiverse extension that adds a frosted glass reading/censor 
 
 ## Behavior
 
-- Shows on chat routes when the chat input is visible. Mobile gets a tolerant route fallback because some WebViews report SPA routes weirdly.
+- Shows on chat routes when the chat input is visible. Mobile also checks for Lumi's `data-component="InputArea"`, message placeholders, and chat-screen text so it does not vanish when the WebView hides the real textbox until focus.
 - Anchors near the input/composer area.
 - Drag the pill handle upward to expand the frosted glass curtain.
 - Drag the pill handle downward to collapse it.
 - The body ignores pointer events so normal scrolling/tapping is not blocked.
 - The ruler yields to app UI: modals, dropdowns, and input popovers should appear above it or temporarily hide it.
-- On desktop, the ruler avoids edge-mounted side panels/dock panels by shrinking away from the left/right edge when one is visible. On mobile, side-panel avoidance is disabled and overlay hiding is used instead, because narrow screens make side-panel math cursed.
+- On desktop, the ruler avoids edge-mounted side panels/dock panels by shrinking away from the left/right edge when one is visible. On mobile, side-panel avoidance is disabled and overlay hiding is conservative, so app chrome should not suppress the ruler forever.
 - The saved height persists in `localStorage` under `lumi-reading-ruler-v3-height`.
 
 ## CSS variables
@@ -106,3 +106,10 @@ bun run build
 ## Notes
 
 This is intentionally simple: no backend, no permissions, no settings panel. It injects one DOM node and one stylesheet, then cleans both up when the extension unloads.
+
+
+## Mobile fallback notes
+
+Version 1.0.7 added a direct `data-component="InputArea"` composer fallback and a mobile chat-screen fallback. This is for mobile WebViews/PWAs where the visible composer may not expose a normal `textarea`/`input` until the user focuses it.
+
+For debugging, inspect the injected node in DevTools: `#lumi-reading-ruler` has `data-reason="active"`, `data-reason="no-chat"`, or `data-reason="blocked-ui"`.

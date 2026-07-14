@@ -99,12 +99,66 @@ function isChatRoute() {
         .toLowerCase();
     return /(?:^|[#/?&])chats?(?:\/|%2f)[^\s?#&]+/.test(routeText);
 }
+function looksLikeMobileChatScreen() {
+    if (!isMobileViewport())
+        return false;
+    const routeText = [window.location.pathname, window.location.hash, window.location.search, window.location.href]
+        .join(' ')
+        .toLowerCase();
+    if (/chat|conversation|thread/.test(routeText))
+        return true;
+    if (document.querySelector('[data-component="InputArea"]'))
+        return true;
+    if (document.querySelector('[placeholder*="message" i], [aria-label*="message" i]'))
+        return true;
+    const bodyText = document.body?.innerText || '';
+    return /type a message|send message|regenerate|continue|greetings/i.test(bodyText);
+}
+function findInputShellCandidates() {
+    const selectors = [
+        '[data-component="InputArea"]',
+        '[data-testid*="input" i]',
+        '[data-testid*="composer" i]',
+        '[aria-label*="message" i]',
+        '[class*="inputarea" i]',
+        '[class*="input-area" i]',
+        '[class*="composer" i]',
+        '[class*="messageinput" i]',
+        '[class*="message-input" i]',
+        '[class*="chatinput" i]',
+        '[class*="chat-input" i]',
+        '[class*="promptinput" i]',
+        '[class*="prompt-input" i]',
+    ];
+    try {
+        return Array.from(document.querySelectorAll(selectors.join(',')))
+            .filter((el) => el instanceof HTMLElement)
+            .filter(isVisibleElement)
+            .filter((el) => {
+            const rect = el.getBoundingClientRect();
+            return (rect.width >= viewportWidth() * 0.42 &&
+                rect.height >= 32 &&
+                rect.height <= Math.min(340, viewportHeight() * 0.44) &&
+                rect.bottom >= viewportHeight() * 0.56);
+        })
+            .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
+    }
+    catch {
+        return [];
+    }
+}
 function findInputAnchor() {
-    const candidates = Array.from(document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"], input[type="text"], input:not([type]), input[placeholder*="message" i], textarea[placeholder*="message" i]')).filter(isVisibleElement);
+    // Lumi exposes the composer as data-component="InputArea" in current desktop/mobile
+    // builds. Prefer the shell when available; mobile sometimes does not expose a normal
+    // textarea/input until focus, which made the older builds hide forever.
+    const shell = findInputShellCandidates()[0];
+    if (shell)
+        return shell;
+    const candidates = Array.from(document.querySelectorAll('textarea, [contenteditable="true"], [contenteditable=""], [role="textbox"], input[type="text"], input:not([type]), input[placeholder*="message" i], textarea[placeholder*="message" i]')).filter(isVisibleElement);
     const lowerCandidates = candidates
         .filter((el) => {
         const rect = el.getBoundingClientRect();
-        return rect.bottom > viewportHeight() * 0.52;
+        return rect.bottom > viewportHeight() * 0.50;
     })
         .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
     for (const candidate of lowerCandidates) {
@@ -115,11 +169,14 @@ function findInputAnchor() {
             const style = window.getComputedStyle(node);
             const className = node.className.toString();
             const id = node.id || '';
-            const nameHint = `${className} ${id}`;
-            const isLikelyInputShell = rect.width >= viewportWidth() * 0.5 &&
-                rect.height >= 34 &&
-                rect.height <= Math.min(280, viewportHeight() * 0.38) &&
-                rect.bottom >= viewportHeight() * 0.62 &&
+            const dataComponent = node.getAttribute('data-component') || '';
+            const dataPart = node.getAttribute('data-part') || '';
+            const aria = node.getAttribute('aria-label') || '';
+            const nameHint = `${className} ${id} ${dataComponent} ${dataPart} ${aria}`;
+            const isLikelyInputShell = rect.width >= viewportWidth() * 0.42 &&
+                rect.height >= 32 &&
+                rect.height <= Math.min(340, viewportHeight() * 0.44) &&
+                rect.bottom >= viewportHeight() * 0.56 &&
                 (style.position === 'fixed' ||
                     style.position === 'absolute' ||
                     style.position === 'sticky' ||
@@ -332,26 +389,38 @@ function horizontalInsets(ruler, inputAnchor, bottomAnchor) {
 function shouldYieldToAppUi(ruler, inputAnchor) {
     const rulerRect = ruler.getBoundingClientRect();
     const handleRect = ruler.querySelector('.reading-ruler-handle')?.getBoundingClientRect() || rulerRect;
+    const mobile = isMobileViewport(ruler);
     for (const el of queryPotentialBlockingElements()) {
         if (el === ruler || ruler.contains(el))
             continue;
-        if (el === inputAnchor || el.contains(inputAnchor) || inputAnchor.contains(el))
+        if (inputAnchor && (el === inputAnchor || el.contains(inputAnchor) || inputAnchor.contains(el)))
             continue;
         if (!isVisibleElement(el))
             continue;
         if (!isPotentialBlockingUi(el))
             continue;
         const rect = el.getBoundingClientRect();
-        const hugeOverlay = rect.width > viewportWidth() * 0.72 && rect.height > viewportHeight() * 0.45;
+        const role = (el.getAttribute('role') || '').toLowerCase();
+        const nameHint = safeNameHint(el);
         const intersectsRuler = rectsOverlap(rect, rulerRect, 10) || rectsOverlap(rect, handleRect, 16);
-        const mobileAppChrome = isMobileViewport(ruler) &&
-            rect.bottom > viewportHeight() * 0.72 &&
-            rect.height <= Math.min(112, viewportHeight() * 0.18) &&
-            !el.hasAttribute('popover') &&
-            el.getAttribute('aria-modal') !== 'true';
-        if (mobileAppChrome)
-            continue;
         const bottomPopover = rect.bottom > viewportHeight() * 0.52 && rect.width > viewportWidth() * 0.35 && rect.height > 48;
+        if (mobile) {
+            // On mobile, the app shell/input chrome often looks like a full-screen overlay in
+            // computed CSS. Be conservative: only yield to obvious modals/sheets/popovers/menus.
+            const hardModal = el.getAttribute('aria-modal') === 'true' ||
+                role === 'dialog' ||
+                /modal|dialog|drawer|sheet/i.test(nameHint);
+            const popup = hasOpenPopover(el) ||
+                /menu|listbox|tooltip/.test(role) ||
+                /popover|popper|dropdown|menu|select|tooltip|floating|portal/i.test(nameHint);
+            if (hardModal && (intersectsRuler || rect.width > viewportWidth() * 0.62 || rect.height > viewportHeight() * 0.36)) {
+                return true;
+            }
+            if (popup && (intersectsRuler || bottomPopover))
+                return true;
+            continue;
+        }
+        const hugeOverlay = rect.width > viewportWidth() * 0.72 && rect.height > viewportHeight() * 0.45;
         if (hugeOverlay || intersectsRuler || bottomPopover)
             return true;
     }
@@ -509,9 +578,11 @@ export function setup(ctx) {
     };
     const syncVisibility = () => {
         const inputAnchor = findInputAnchor();
-        const activeChat = (isChatRoute() || isMobileViewport(ruler)) && inputAnchor !== null;
-        if (!activeChat || !inputAnchor) {
+        const mobile = isMobileViewport(ruler);
+        const activeChat = isChatRoute() || inputAnchor !== null || looksLikeMobileChatScreen();
+        if (!activeChat) {
             ruler.dataset.active = 'false';
+            ruler.dataset.reason = 'no-chat';
             return;
         }
         if (!dragging) {
@@ -520,8 +591,15 @@ export function setup(ctx) {
             if (saved !== null)
                 applyHeight(saved, false);
         }
-        applyHorizontalInsets(inputAnchor);
+        if (inputAnchor) {
+            applyHorizontalInsets(inputAnchor);
+        }
+        else if (mobile) {
+            ruler.style.setProperty('--lrr-runtime-left', 'var(--lrr-side-inset, 10px)');
+            ruler.style.setProperty('--lrr-runtime-right', 'var(--lrr-side-inset, 10px)');
+        }
         const blockedByUi = !dragging && shouldYieldToAppUi(ruler, inputAnchor);
+        ruler.dataset.reason = blockedByUi ? 'blocked-ui' : 'active';
         ruler.dataset.active = blockedByUi ? 'false' : 'true';
     };
     const scheduleSync = () => {
