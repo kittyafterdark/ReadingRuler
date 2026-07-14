@@ -12,6 +12,7 @@ const SIDE_PANEL_GAP = 8;
 const MIN_RULER_WIDTH = 180;
 const MAX_EDGE_PANEL_WIDTH = 680;
 const MOBILE_BREAKPOINT = 760;
+const MOBILE_YIELD_UI = 0;
 function viewportHeight() {
     return window.innerHeight || document.documentElement.clientHeight || 720;
 }
@@ -58,6 +59,9 @@ function zIndexThreshold() {
 }
 function mobileBreakpoint(ruler) {
     return readCssNumber('--lrr-mobile-breakpoint', MOBILE_BREAKPOINT, ruler);
+}
+function mobileYieldUi(ruler) {
+    return readCssNumber('--lrr-mobile-yield-ui', MOBILE_YIELD_UI, ruler) >= 0.5;
 }
 function isMobileViewport(ruler) {
     return viewportWidth() <= mobileBreakpoint(ruler);
@@ -387,6 +391,14 @@ function horizontalInsets(ruler, inputAnchor, bottomAnchor) {
     return { left: Math.round(left), right: Math.round(right) };
 }
 function shouldYieldToAppUi(ruler, inputAnchor) {
+    ruler.dataset.blocker = '';
+    // Mobile Lumi/WebView chrome can expose ordinary app wrappers as "open"
+    // dialogs, portals, menus, or data-state panels. Earlier builds obeyed those
+    // too politely and hid forever with data-reason="blocked-ui". Default mobile
+    // behavior is now: show in chat. People who prefer the old experimental mobile
+    // yielding can opt back in with --lrr-mobile-yield-ui: 1.
+    if (isMobileViewport(ruler) && !mobileYieldUi(ruler))
+        return false;
     const rulerRect = ruler.getBoundingClientRect();
     const handleRect = ruler.querySelector('.reading-ruler-handle')?.getBoundingClientRect() || rulerRect;
     const mobile = isMobileViewport(ruler);
@@ -414,15 +426,20 @@ function shouldYieldToAppUi(ruler, inputAnchor) {
                 /menu|listbox|tooltip/.test(role) ||
                 /popover|popper|dropdown|menu|select|tooltip|floating|portal/i.test(nameHint);
             if (hardModal && (intersectsRuler || rect.width > viewportWidth() * 0.62 || rect.height > viewportHeight() * 0.36)) {
+                ruler.dataset.blocker = nameHint || role || el.tagName.toLowerCase();
                 return true;
             }
-            if (popup && (intersectsRuler || bottomPopover))
+            if (popup && (intersectsRuler || bottomPopover)) {
+                ruler.dataset.blocker = nameHint || role || el.tagName.toLowerCase();
                 return true;
+            }
             continue;
         }
         const hugeOverlay = rect.width > viewportWidth() * 0.72 && rect.height > viewportHeight() * 0.45;
-        if (hugeOverlay || intersectsRuler || bottomPopover)
+        if (hugeOverlay || intersectsRuler || bottomPopover) {
+            ruler.dataset.blocker = nameHint || role || el.tagName.toLowerCase();
             return true;
+        }
     }
     return false;
 }

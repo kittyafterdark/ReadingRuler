@@ -41,6 +41,7 @@ Main layout / behavior variables:
   --lrr-min-width: 180px;
   --lrr-max-edge-panel-width: 680px;
   --lrr-mobile-breakpoint: 760px;
+  --lrr-mobile-yield-ui: 0;
 }
 ```
 
@@ -113,3 +114,16 @@ This is intentionally simple: no backend, no permissions, no settings panel. It 
 Version 1.0.7 added a direct `data-component="InputArea"` composer fallback and a mobile chat-screen fallback. This is for mobile WebViews/PWAs where the visible composer may not expose a normal `textarea`/`input` until the user focuses it.
 
 For debugging, inspect the injected node in DevTools: `#lumi-reading-ruler` has `data-reason="active"`, `data-reason="no-chat"`, or `data-reason="blocked-ui"`.
+
+
+## 1.0.8 mobile note
+
+Mobile overlay yielding is now opt-in. Some Android/WebView builds report normal Lumi chrome as open dialogs/portals, which made the ruler hide forever with `data-reason="blocked-ui"`. By default, mobile now prioritizes showing the ruler in chat. To re-enable experimental mobile UI yielding, add:
+
+```css
+:root {
+  --lrr-mobile-yield-ui: 1;
+}
+```
+
+For debugging, `#lumi-reading-ruler` also exposes `data-blocker` when an element triggers UI yielding.
