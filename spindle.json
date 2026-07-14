@@ -1,0 +1,12 @@
+{
+  "version": "1.0.0",
+  "name": "Reading Ruler",
+  "identifier": "reading_ruler",
+  "author": "Kittylotus + ChatGPT",
+  "github": "https://github.com/kittylotus/lumi-reading-ruler",
+  "homepage": "https://github.com/kittylotus/lumi-reading-ruler",
+  "description": "A tiny frontend-only frosted glass reading ruler for Lumiverse. Drag the pill handle to move the strip up or down.",
+  "permissions": [],
+  "entry_frontend": "dist/frontend.js",
+  "minimum_lumiverse_version": "0.1.0"
+}
