@@ -1,51 +1,37 @@
-# Lumiverse Reading Ruler
+# Lumi Reading Ruler
 
-Tiny frontend-only Lumiverse / Spindle extension that adds a draggable frosted-glass reading ruler over chat pages.
+Tiny frontend-only Lumiverse extension that adds a frosted glass reading/censor ruler on chat pages.
 
-## What it does
+## Behavior
 
 - Shows only on `/chat/:chatId` routes.
-- Adds one thin fixed frosted strip above the input area.
-- Lets you drag the larger center pill handle up and down.
-- Saves the strip position in `localStorage` using the v2 key `lumi-reading-ruler-v2-bottom`.
-- Uses no backend and asks for no permissions.
-- Lets scrolling and tapping pass through the glass body; only the handle captures touch/click drag.
+- Anchors near the input/composer area.
+- Drag the pill handle upward to expand the frosted glass curtain.
+- Drag the pill handle downward to collapse it.
+- The body ignores pointer events so normal scrolling/tapping is not blocked.
+- The saved height persists in `localStorage` under `lumi-reading-ruler-v3-height`.
 
-## Changes in 1.0.1
+## Files
 
-- Fixed the ruler showing on the Lumiverse landing / character grid.
-- Reduced the strip height from 92px to 46px.
-- Made the drag handle much easier to grab on mobile.
-- Added mouse, touch, and pointer-event drag handling.
-- Added a cleanup guard so hot reloads / reinstall tests do not leave old listeners around.
+```text
+lumi-reading-ruler/
+├── spindle.json
+├── package.json
+├── tsconfig.json
+├── README.md
+├── src/frontend.ts
+└── dist/frontend.js
+```
 
-## Test install
+`dist/frontend.js` is already included for quick testing.
 
-The ZIP already includes `dist/frontend.js`, so it should be usable without building.
-
-If you edit `src/frontend.ts`, rebuild with:
+## Dev
 
 ```bash
 bun install
 bun run build
 ```
 
-## Files
+## Notes
 
-```text
-spindle.json
-src/frontend.ts
-dist/frontend.js
-package.json
-tsconfig.json
-```
-
-## Troubleshooting
-
-If an older test build left the ruler in a weird position, clear this key in DevTools/localStorage:
-
-```text
-lumi-reading-ruler-v2-bottom
-```
-
-The older prototype used `lumi-reading-ruler-bottom`; this build does not read that key.
+This is intentionally simple: no backend, no permissions, no settings panel. It injects one DOM node and one stylesheet, then cleans both up when the extension unloads.

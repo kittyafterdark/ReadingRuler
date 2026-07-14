@@ -1,24 +1,25 @@
 const ROOT_ID = "lumi-reading-ruler";
-const STORAGE_KEY = "lumi-reading-ruler-v2-bottom";
+const STORAGE_KEY = "lumi-reading-ruler-v3-height";
 const GLOBAL_CLEANUP_KEY = "__lumiReadingRulerCleanup";
-const DEFAULT_BOTTOM = 118;
-const MIN_BOTTOM = 8;
-const TOP_MARGIN = 32;
-const RULER_HEIGHT = 46;
+const DEFAULT_HEIGHT = 84;
+const MIN_HEIGHT = 38;
+const TOP_MARGIN = 34;
+const DEFAULT_BOTTOM_ANCHOR = 118;
+const INPUT_GAP = 8;
 function viewportHeight() {
   return window.innerHeight || document.documentElement.clientHeight || 720;
 }
-function readSavedBottom() {
+function readSavedHeight() {
   const raw = window.localStorage.getItem(STORAGE_KEY);
   const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
   return Number.isFinite(parsed) ? parsed : null;
 }
-function clampBottom(value) {
-  const maxBottom = Math.max(MIN_BOTTOM, viewportHeight() - RULER_HEIGHT - TOP_MARGIN);
-  return Math.max(MIN_BOTTOM, Math.min(maxBottom, value));
-}
-function saveBottom(value) {
+function saveHeight(value) {
   window.localStorage.setItem(STORAGE_KEY, String(Math.round(value)));
+}
+function clampHeight(value, bottomAnchor) {
+  const maxHeight = Math.max(MIN_HEIGHT, viewportHeight() - bottomAnchor - TOP_MARGIN);
+  return Math.max(MIN_HEIGHT, Math.min(maxHeight, value));
 }
 function isVisibleElement(el) {
   if (!(el instanceof HTMLElement)) return false;
@@ -30,18 +31,23 @@ function isChatRoute() {
   return /(?:^|\/)chat\/[^/]+/.test(window.location.pathname);
 }
 function findInputAnchor() {
-  const textareas = Array.from(document.querySelectorAll("textarea")).filter(isVisibleElement);
-  const lowerTextareas = textareas.filter((ta) => {
-    const rect = ta.getBoundingClientRect();
+  const candidates = Array.from(
+    document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"]')
+  ).filter(isVisibleElement);
+  const lowerCandidates = candidates.filter((el) => {
+    const rect = el.getBoundingClientRect();
     return rect.top > viewportHeight() * 0.45;
   });
-  for (const textarea of lowerTextareas) {
-    let best = textarea;
-    let node = textarea;
+  for (const candidate of lowerCandidates) {
+    let best = candidate;
+    let node = candidate;
     while (node && node !== document.body && node !== document.documentElement) {
       const rect = node.getBoundingClientRect();
       const style = window.getComputedStyle(node);
-      const isLikelyInputShell = rect.width >= window.innerWidth * 0.52 && rect.height >= 36 && rect.height <= Math.min(260, viewportHeight() * 0.36) && rect.bottom >= viewportHeight() * 0.66 && (style.position === "fixed" || style.position === "absolute" || style.position === "sticky" || /(^|\s|_)container(_|\s|$)|input|composer|bar/i.test(node.className.toString()));
+      const className = node.className.toString();
+      const id = node.id || "";
+      const nameHint = `${className} ${id}`;
+      const isLikelyInputShell = rect.width >= window.innerWidth * 0.5 && rect.height >= 34 && rect.height <= Math.min(280, viewportHeight() * 0.38) && rect.bottom >= viewportHeight() * 0.62 && (style.position === "fixed" || style.position === "absolute" || style.position === "sticky" || /input|composer|message|textarea|prompt|bar|bottom|container/i.test(nameHint));
       if (isLikelyInputShell) best = node;
       node = node.parentElement;
     }
@@ -49,12 +55,12 @@ function findInputAnchor() {
   }
   return null;
 }
-function computeSpawnBottom() {
+function computeBottomAnchor() {
   const anchor = findInputAnchor();
-  if (!anchor) return DEFAULT_BOTTOM;
+  if (!anchor) return DEFAULT_BOTTOM_ANCHOR;
   const rect = anchor.getBoundingClientRect();
-  const bottom = viewportHeight() - rect.top + 8;
-  return Number.isFinite(bottom) ? bottom : DEFAULT_BOTTOM;
+  const bottom = viewportHeight() - rect.top + INPUT_GAP;
+  return Number.isFinite(bottom) ? Math.max(0, bottom) : DEFAULT_BOTTOM_ANCHOR;
 }
 function getClientY(event) {
   if ("touches" in event) {
@@ -63,15 +69,17 @@ function getClientY(event) {
   }
   return event.clientY;
 }
-export function setup(ctx) {
+function setup(ctx) {
   const win = window;
   win[GLOBAL_CLEANUP_KEY]?.();
+  const initialBottom = computeBottomAnchor();
+  const initialHeight = clampHeight(readSavedHeight() ?? DEFAULT_HEIGHT, initialBottom);
   const removeStyle = ctx.dom.addStyle(`
     #${ROOT_ID} {
       position: fixed;
       inset-inline: 10px;
-      bottom: ${clampBottom(readSavedBottom() ?? computeSpawnBottom())}px;
-      height: ${RULER_HEIGHT}px;
+      bottom: ${initialBottom}px;
+      height: ${initialHeight}px;
       z-index: 2147483000;
       display: none;
       pointer-events: none;
@@ -81,34 +89,34 @@ export function setup(ctx) {
       transform: translateY(10px);
       transition:
         opacity 140ms ease,
-        transform 140ms ease,
-        bottom 80ms linear;
+        transform 140ms ease;
 
       background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.105), rgba(255, 255, 255, 0.035)),
-        linear-gradient(180deg, rgba(32, 30, 42, 0.48), rgba(10, 10, 14, 0.54));
+        linear-gradient(180deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.035)),
+        linear-gradient(180deg, rgba(40, 38, 52, 0.58), rgba(8, 8, 12, 0.64));
       backdrop-filter: blur(12px) saturate(118%);
       -webkit-backdrop-filter: blur(12px) saturate(118%);
 
-      border-block: 1px solid rgba(235, 226, 255, 0.15);
-      border-radius: 12px;
+      border-top: 1px solid rgba(245, 239, 255, 0.22);
+      border-inline: 1px solid rgba(235, 226, 255, 0.10);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.20);
+      border-radius: 12px 12px 0 0;
       box-shadow:
-        0 -8px 20px rgba(0, 0, 0, 0.26),
-        0 8px 20px rgba(0, 0, 0, 0.26),
-        inset 0 1px 0 rgba(255, 255, 255, 0.08),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.28);
+        0 -10px 28px rgba(0, 0, 0, 0.30),
+        inset 0 1px 0 rgba(255, 255, 255, 0.09),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.30);
       overflow: visible;
     }
 
     #${ROOT_ID}[data-active="true"] {
       display: block;
-      opacity: 0.88;
+      opacity: 0.90;
       transform: translateY(0);
     }
 
     #${ROOT_ID}[data-dragging="true"] {
       opacity: 0.98;
-      transition: opacity 80ms ease;
+      transition: none;
     }
 
     #${ROOT_ID}::before {
@@ -118,32 +126,31 @@ export function setup(ctx) {
       pointer-events: none;
       border-radius: inherit;
       background:
-        repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 12px),
-        linear-gradient(90deg, transparent, rgba(230, 218, 255, 0.08), transparent);
-      opacity: 0.55;
+        repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.034) 0 1px, transparent 1px 12px),
+        linear-gradient(90deg, transparent, rgba(230, 218, 255, 0.075), transparent);
+      opacity: 0.62;
     }
 
     #${ROOT_ID}::after {
       content: '';
       position: absolute;
       inset-inline: 8%;
-      top: 50%;
+      top: 0;
       height: 1px;
       pointer-events: none;
-      background: linear-gradient(90deg, transparent, rgba(235, 226, 255, 0.38), transparent);
-      transform: translateY(-50%);
+      background: linear-gradient(90deg, transparent, rgba(245, 239, 255, 0.62), transparent);
+      box-shadow: 0 1px 8px rgba(205, 194, 255, 0.22);
     }
 
     #${ROOT_ID} .reading-ruler-handle {
       position: absolute;
-      left: 50%;
-      top: -22px;
-      width: min(232px, 48vw);
-      height: 42px;
-      transform: translateX(-50%);
+      left: 0;
+      right: 0;
+      top: -32px;
+      height: 58px;
       border: 0;
+      margin: 0;
       padding: 0;
-      border-radius: 999px;
       background: transparent;
       pointer-events: auto;
       touch-action: none;
@@ -155,39 +162,26 @@ export function setup(ctx) {
       content: '';
       position: absolute;
       left: 50%;
-      top: 14px;
-      width: min(168px, 36vw);
+      top: 17px;
+      width: min(172px, 38vw);
       height: 8px;
       transform: translateX(-50%);
       border-radius: 999px;
       background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(210, 204, 230, 0.35));
-      border: 1px solid rgba(255, 255, 255, 0.38);
+        linear-gradient(180deg, rgba(255, 255, 255, 0.76), rgba(210, 204, 230, 0.36));
+      border: 1px solid rgba(255, 255, 255, 0.42);
       box-shadow:
-        0 4px 13px rgba(0, 0, 0, 0.55),
-        inset 0 1px 0 rgba(255, 255, 255, 0.58);
-    }
-
-    #${ROOT_ID} .reading-ruler-handle::after {
-      content: 'drag';
-      position: absolute;
-      left: 50%;
-      top: 25px;
-      transform: translateX(-50%);
-      color: rgba(235, 226, 255, 0.45);
-      font: 600 9px/1 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+        0 4px 13px rgba(0, 0, 0, 0.58),
+        inset 0 1px 0 rgba(255, 255, 255, 0.62);
     }
 
     #${ROOT_ID}[data-dragging="true"] .reading-ruler-handle::before {
-      filter: brightness(1.12);
+      filter: brightness(1.14);
     }
   `);
   const wrapper = ctx.dom.inject(
     "body",
-    `<div id="${ROOT_ID}" aria-label="Draggable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag reading ruler"></button></div>`,
+    `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler"></button></div>`,
     "beforeend"
   );
   const ruler = document.getElementById(ROOT_ID);
@@ -200,28 +194,27 @@ export function setup(ctx) {
   let dragging = false;
   let activePointerId = null;
   let startY = 0;
-  let startBottom = 0;
-  let hasUserPosition = readSavedBottom() !== null;
+  let startHeight = 0;
+  let lastBottomAnchor = initialBottom;
   let syncFrame = 0;
-  const applyBottom = (nextBottom, persist = true) => {
-    const clamped = clampBottom(nextBottom);
-    ruler.style.bottom = `${clamped}px`;
-    if (persist) {
-      saveBottom(clamped);
-      hasUserPosition = true;
-    }
+  const applyHeight = (nextHeight, persist = true) => {
+    const clamped = clampHeight(nextHeight, lastBottomAnchor);
+    ruler.style.height = `${clamped}px`;
+    if (persist) saveHeight(clamped);
+  };
+  const applyBottomAnchor = (nextBottom) => {
+    lastBottomAnchor = nextBottom;
+    ruler.style.bottom = `${nextBottom}px`;
+    const currentHeight = Number.parseFloat(window.getComputedStyle(ruler).height);
+    applyHeight(Number.isFinite(currentHeight) ? currentHeight : initialHeight, false);
   };
   const syncVisibility = () => {
     const active = isChatRoute();
     ruler.dataset.active = active ? "true" : "false";
     if (!active || dragging) return;
-    const saved = readSavedBottom();
-    if (saved !== null) {
-      applyBottom(saved, false);
-      hasUserPosition = true;
-      return;
-    }
-    if (!hasUserPosition) applyBottom(computeSpawnBottom(), false);
+    applyBottomAnchor(computeBottomAnchor());
+    const saved = readSavedHeight();
+    if (saved !== null) applyHeight(saved, false);
   };
   const scheduleSync = () => {
     cancelAnimationFrame(syncFrame);
@@ -233,7 +226,7 @@ export function setup(ctx) {
     dragging = true;
     ruler.dataset.dragging = "true";
     startY = clientY;
-    startBottom = Number.parseFloat(window.getComputedStyle(ruler).bottom) || computeSpawnBottom();
+    startHeight = ruler.getBoundingClientRect().height || initialHeight;
     if ("pointerId" in event) {
       activePointerId = event.pointerId;
       try {
@@ -249,7 +242,7 @@ export function setup(ctx) {
     const clientY = getClientY(event);
     if (clientY === null) return;
     const delta = startY - clientY;
-    applyBottom(startBottom + delta);
+    applyHeight(startHeight + delta);
     event.preventDefault();
   };
   const endDrag = (event) => {
@@ -265,23 +258,28 @@ export function setup(ctx) {
     ruler.dataset.dragging = "false";
   };
   const onResize = () => {
-    const current = Number.parseFloat(window.getComputedStyle(ruler).bottom);
-    applyBottom(Number.isFinite(current) ? current : computeSpawnBottom(), hasUserPosition);
+    applyBottomAnchor(computeBottomAnchor());
+    const saved = readSavedHeight();
+    applyHeight(saved ?? DEFAULT_HEIGHT, false);
     scheduleSync();
   };
   const observer = new MutationObserver(scheduleSync);
   observer.observe(document.body, { childList: true, subtree: true });
-  handle.addEventListener("pointerdown", beginDrag, { passive: false });
-  window.addEventListener("pointermove", continueDrag, { passive: false });
-  window.addEventListener("pointerup", endDrag, { passive: false });
-  window.addEventListener("pointercancel", endDrag, { passive: false });
-  handle.addEventListener("mousedown", beginDrag, { passive: false });
-  window.addEventListener("mousemove", continueDrag, { passive: false });
-  window.addEventListener("mouseup", endDrag, { passive: false });
-  handle.addEventListener("touchstart", beginDrag, { passive: false });
-  window.addEventListener("touchmove", continueDrag, { passive: false });
-  window.addEventListener("touchend", endDrag, { passive: false });
-  window.addEventListener("touchcancel", endDrag, { passive: false });
+  const supportsPointer = "PointerEvent" in window;
+  if (supportsPointer) {
+    handle.addEventListener("pointerdown", beginDrag, { passive: false });
+    window.addEventListener("pointermove", continueDrag, { passive: false });
+    window.addEventListener("pointerup", endDrag, { passive: false });
+    window.addEventListener("pointercancel", endDrag, { passive: false });
+  } else {
+    handle.addEventListener("mousedown", beginDrag, { passive: false });
+    window.addEventListener("mousemove", continueDrag, { passive: false });
+    window.addEventListener("mouseup", endDrag, { passive: false });
+    handle.addEventListener("touchstart", beginDrag, { passive: false });
+    window.addEventListener("touchmove", continueDrag, { passive: false });
+    window.addEventListener("touchend", endDrag, { passive: false });
+    window.addEventListener("touchcancel", endDrag, { passive: false });
+  }
   window.addEventListener("resize", onResize);
   window.addEventListener("orientationchange", onResize);
   window.addEventListener("popstate", scheduleSync);
@@ -292,17 +290,20 @@ export function setup(ctx) {
     cancelAnimationFrame(syncFrame);
     window.clearInterval(interval);
     observer.disconnect();
-    handle.removeEventListener("pointerdown", beginDrag);
-    window.removeEventListener("pointermove", continueDrag);
-    window.removeEventListener("pointerup", endDrag);
-    window.removeEventListener("pointercancel", endDrag);
-    handle.removeEventListener("mousedown", beginDrag);
-    window.removeEventListener("mousemove", continueDrag);
-    window.removeEventListener("mouseup", endDrag);
-    handle.removeEventListener("touchstart", beginDrag);
-    window.removeEventListener("touchmove", continueDrag);
-    window.removeEventListener("touchend", endDrag);
-    window.removeEventListener("touchcancel", endDrag);
+    if (supportsPointer) {
+      handle.removeEventListener("pointerdown", beginDrag);
+      window.removeEventListener("pointermove", continueDrag);
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", endDrag);
+    } else {
+      handle.removeEventListener("mousedown", beginDrag);
+      window.removeEventListener("mousemove", continueDrag);
+      window.removeEventListener("mouseup", endDrag);
+      handle.removeEventListener("touchstart", beginDrag);
+      window.removeEventListener("touchmove", continueDrag);
+      window.removeEventListener("touchend", endDrag);
+      window.removeEventListener("touchcancel", endDrag);
+    }
     window.removeEventListener("resize", onResize);
     window.removeEventListener("orientationchange", onResize);
     window.removeEventListener("popstate", scheduleSync);
@@ -315,3 +316,6 @@ export function setup(ctx) {
   win[GLOBAL_CLEANUP_KEY] = cleanup;
   return cleanup;
 }
+export {
+  setup
+};
