@@ -9,8 +9,75 @@ Tiny frontend-only Lumiverse extension that adds a frosted glass reading/censor 
 - Drag the pill handle upward to expand the frosted glass curtain.
 - Drag the pill handle downward to collapse it.
 - The body ignores pointer events so normal scrolling/tapping is not blocked.
-- The ruler yields to app UI: side panels, modals, dropdowns, and input popovers should appear above it or temporarily hide it.
+- The ruler yields to app UI: modals, dropdowns, and input popovers should appear above it or temporarily hide it.
+- The ruler also avoids edge-mounted side panels/dock panels by shrinking away from the left/right edge when one is visible.
 - The saved height persists in `localStorage` under `lumi-reading-ruler-v3-height`.
+
+## CSS variables
+
+Override these from user CSS/theme CSS. Root-level variables are supported, so this is fine:
+
+```css
+:root {
+  --lrr-blur: 16px;
+  --lrr-opacity: 0.82;
+  --lrr-side-inset: 14px;
+  --lrr-side-panel-gap: 10px;
+  --lrr-radius: 10px 10px 0 0;
+  --lrr-handle-width: 150px;
+}
+```
+
+Main layout / behavior variables:
+
+```css
+:root {
+  --lrr-z-index: 24;
+  --lrr-default-height: 84px;
+  --lrr-min-height: 38px;
+  --lrr-top-margin: 34px;
+  --lrr-side-inset: 10px;
+  --lrr-side-panel-gap: 8px;
+}
+```
+
+Visual variables:
+
+```css
+:root {
+  --lrr-opacity: 0.90;
+  --lrr-drag-opacity: 0.98;
+  --lrr-blur: 12px;
+  --lrr-saturate: 118%;
+  --lrr-background:
+    linear-gradient(180deg, rgba(255,255,255,.11), rgba(255,255,255,.035)),
+    linear-gradient(180deg, rgba(40,38,52,.58), rgba(8,8,12,.64));
+  --lrr-border-top: 1px solid rgba(245,239,255,.22);
+  --lrr-border-inline: 1px solid rgba(235,226,255,.10);
+  --lrr-border-bottom: 1px solid rgba(0,0,0,.20);
+  --lrr-radius: 12px 12px 0 0;
+  --lrr-shadow:
+    0 -10px 28px rgba(0,0,0,.30),
+    inset 0 1px 0 rgba(255,255,255,.09),
+    inset 0 -1px 0 rgba(0,0,0,.30);
+  --lrr-line-gap: 12px;
+  --lrr-texture-opacity: 0.62;
+}
+```
+
+Handle variables:
+
+```css
+:root {
+  --lrr-handle-hit-top: -32px;
+  --lrr-handle-hit-height: 58px;
+  --lrr-handle-top: 17px;
+  --lrr-handle-width: 172px;
+  --lrr-handle-height: 8px;
+  --lrr-handle-radius: 999px;
+  --lrr-handle-drag-filter: brightness(1.14);
+}
+```
 
 ## Files
 
