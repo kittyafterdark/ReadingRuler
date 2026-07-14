@@ -4,13 +4,13 @@ Tiny frontend-only Lumiverse extension that adds a frosted glass reading/censor 
 
 ## Behavior
 
-- Shows only on `/chat/:chatId` routes when the chat input is actually visible.
+- Shows on chat routes when the chat input is visible. Mobile gets a tolerant route fallback because some WebViews report SPA routes weirdly.
 - Anchors near the input/composer area.
 - Drag the pill handle upward to expand the frosted glass curtain.
 - Drag the pill handle downward to collapse it.
 - The body ignores pointer events so normal scrolling/tapping is not blocked.
 - The ruler yields to app UI: modals, dropdowns, and input popovers should appear above it or temporarily hide it.
-- The ruler also avoids edge-mounted side panels/dock panels by shrinking away from the left/right edge when one is visible. The edge-panel detector is conservative so it should not mistake the whole app shell for a panel.
+- On desktop, the ruler avoids edge-mounted side panels/dock panels by shrinking away from the left/right edge when one is visible. On mobile, side-panel avoidance is disabled and overlay hiding is used instead, because narrow screens make side-panel math cursed.
 - The saved height persists in `localStorage` under `lumi-reading-ruler-v3-height`.
 
 ## CSS variables
@@ -40,6 +40,7 @@ Main layout / behavior variables:
   --lrr-side-panel-gap: 8px;
   --lrr-min-width: 180px;
   --lrr-max-edge-panel-width: 680px;
+  --lrr-mobile-breakpoint: 760px;
 }
 ```
 

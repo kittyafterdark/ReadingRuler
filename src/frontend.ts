@@ -14,6 +14,7 @@ const SIDE_INSET = 10
 const SIDE_PANEL_GAP = 8
 const MIN_RULER_WIDTH = 180
 const MAX_EDGE_PANEL_WIDTH = 680
+const MOBILE_BREAKPOINT = 760
 
 type CleanupWindow = Window & {
   [GLOBAL_CLEANUP_KEY]?: () => void
@@ -75,6 +76,14 @@ function zIndexThreshold(): number {
   return readCssNumber('--lrr-z-index', RULER_Z_INDEX)
 }
 
+function mobileBreakpoint(ruler?: HTMLElement | null): number {
+  return readCssNumber('--lrr-mobile-breakpoint', MOBILE_BREAKPOINT, ruler)
+}
+
+function isMobileViewport(ruler?: HTMLElement | null): boolean {
+  return viewportWidth() <= mobileBreakpoint(ruler)
+}
+
 function readSavedHeight(): number | null {
   const raw = window.localStorage.getItem(STORAGE_KEY)
   const parsed = raw ? Number.parseFloat(raw) : Number.NaN
@@ -109,18 +118,31 @@ function isVisibleElement(el: Element): el is HTMLElement {
 }
 
 function isChatRoute(): boolean {
-  return /(?:^|\/)chat\/[^/]+/.test(window.location.pathname)
+  const routeText = [
+    window.location.pathname,
+    window.location.hash,
+    window.location.search,
+    window.location.href,
+  ]
+    .join(' ')
+    .toLowerCase()
+
+  return /(?:^|[#/?&])chats?(?:\/|%2f)[^\s?#&]+/.test(routeText)
 }
 
 function findInputAnchor(): HTMLElement | null {
   const candidates = Array.from(
-    document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"]'),
+    document.querySelectorAll(
+      'textarea, [contenteditable="true"], [role="textbox"], input[type="text"], input:not([type]), input[placeholder*="message" i], textarea[placeholder*="message" i]',
+    ),
   ).filter(isVisibleElement)
 
-  const lowerCandidates = candidates.filter((el) => {
-    const rect = el.getBoundingClientRect()
-    return rect.top > viewportHeight() * 0.45
-  })
+  const lowerCandidates = candidates
+    .filter((el) => {
+      const rect = el.getBoundingClientRect()
+      return rect.bottom > viewportHeight() * 0.52
+    })
+    .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom)
 
   for (const candidate of lowerCandidates) {
     let best: HTMLElement | null = candidate
@@ -316,6 +338,8 @@ function edgePanelInsets(
   inputAnchor: HTMLElement,
   bottomAnchor: number,
 ): { left: number; right: number } {
+  if (isMobileViewport(ruler)) return { left: 0, right: 0 }
+
   const height =
     Number.parseFloat(ruler.style.height) ||
     ruler.getBoundingClientRect().height ||
@@ -394,13 +418,22 @@ function shouldYieldToAppUi(ruler: HTMLElement, inputAnchor: HTMLElement): boole
 
   for (const el of queryPotentialBlockingElements()) {
     if (el === ruler || ruler.contains(el)) continue
-    if (el === inputAnchor) continue
+    if (el === inputAnchor || el.contains(inputAnchor) || inputAnchor.contains(el)) continue
     if (!isVisibleElement(el)) continue
     if (!isPotentialBlockingUi(el)) continue
 
     const rect = el.getBoundingClientRect()
     const hugeOverlay = rect.width > viewportWidth() * 0.72 && rect.height > viewportHeight() * 0.45
     const intersectsRuler = rectsOverlap(rect, rulerRect, 10) || rectsOverlap(rect, handleRect, 16)
+    const mobileAppChrome =
+      isMobileViewport(ruler) &&
+      rect.bottom > viewportHeight() * 0.72 &&
+      rect.height <= Math.min(112, viewportHeight() * 0.18) &&
+      !el.hasAttribute('popover') &&
+      el.getAttribute('aria-modal') !== 'true'
+
+    if (mobileAppChrome) continue
+
     const bottomPopover =
       rect.bottom > viewportHeight() * 0.52 && rect.width > viewportWidth() * 0.35 && rect.height > 48
 
@@ -577,7 +610,7 @@ export function setup(ctx: SpindleFrontendContext) {
 
   const syncVisibility = () => {
     const inputAnchor = findInputAnchor()
-    const activeChat = isChatRoute() && inputAnchor !== null
+    const activeChat = (isChatRoute() || isMobileViewport(ruler)) && inputAnchor !== null
 
     if (!activeChat || !inputAnchor) {
       ruler.dataset.active = 'false'
