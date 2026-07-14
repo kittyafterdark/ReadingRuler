@@ -1,86 +1,206 @@
-const ROOT_ID = "lumi-reading-ruler";
-const STORAGE_KEY = "lumi-reading-ruler-v3-height";
-const GLOBAL_CLEANUP_KEY = "__lumiReadingRulerCleanup";
+const ROOT_ID = 'lumi-reading-ruler';
+const STORAGE_KEY = 'lumi-reading-ruler-v3-height';
+const GLOBAL_CLEANUP_KEY = '__lumiReadingRulerCleanup';
 const DEFAULT_HEIGHT = 84;
 const MIN_HEIGHT = 38;
 const TOP_MARGIN = 34;
 const DEFAULT_BOTTOM_ANCHOR = 118;
 const INPUT_GAP = 8;
+const RULER_Z_INDEX = 24;
 function viewportHeight() {
-  return window.innerHeight || document.documentElement.clientHeight || 720;
+    return window.innerHeight || document.documentElement.clientHeight || 720;
+}
+function viewportWidth() {
+    return window.innerWidth || document.documentElement.clientWidth || 390;
 }
 function readSavedHeight() {
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
-  return Number.isFinite(parsed) ? parsed : null;
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : null;
 }
 function saveHeight(value) {
-  window.localStorage.setItem(STORAGE_KEY, String(Math.round(value)));
+    window.localStorage.setItem(STORAGE_KEY, String(Math.round(value)));
 }
 function clampHeight(value, bottomAnchor) {
-  const maxHeight = Math.max(MIN_HEIGHT, viewportHeight() - bottomAnchor - TOP_MARGIN);
-  return Math.max(MIN_HEIGHT, Math.min(maxHeight, value));
+    const maxHeight = Math.max(MIN_HEIGHT, viewportHeight() - bottomAnchor - TOP_MARGIN);
+    return Math.max(MIN_HEIGHT, Math.min(maxHeight, value));
 }
 function isVisibleElement(el) {
-  if (!(el instanceof HTMLElement)) return false;
-  const rect = el.getBoundingClientRect();
-  const style = window.getComputedStyle(el);
-  return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < viewportHeight() && style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+    if (!(el instanceof HTMLElement))
+        return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return (rect.width > 0 &&
+        rect.height > 0 &&
+        rect.bottom > 0 &&
+        rect.top < viewportHeight() &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.opacity !== '0');
 }
 function isChatRoute() {
-  return /(?:^|\/)chat\/[^/]+/.test(window.location.pathname);
+    return /(?:^|\/)chat\/[^/]+/.test(window.location.pathname);
 }
 function findInputAnchor() {
-  const candidates = Array.from(
-    document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"]')
-  ).filter(isVisibleElement);
-  const lowerCandidates = candidates.filter((el) => {
-    const rect = el.getBoundingClientRect();
-    return rect.top > viewportHeight() * 0.45;
-  });
-  for (const candidate of lowerCandidates) {
-    let best = candidate;
-    let node = candidate;
-    while (node && node !== document.body && node !== document.documentElement) {
-      const rect = node.getBoundingClientRect();
-      const style = window.getComputedStyle(node);
-      const className = node.className.toString();
-      const id = node.id || "";
-      const nameHint = `${className} ${id}`;
-      const isLikelyInputShell = rect.width >= window.innerWidth * 0.5 && rect.height >= 34 && rect.height <= Math.min(280, viewportHeight() * 0.38) && rect.bottom >= viewportHeight() * 0.62 && (style.position === "fixed" || style.position === "absolute" || style.position === "sticky" || /input|composer|message|textarea|prompt|bar|bottom|container/i.test(nameHint));
-      if (isLikelyInputShell) best = node;
-      node = node.parentElement;
+    const candidates = Array.from(document.querySelectorAll('textarea, [contenteditable="true"], input[type="text"]')).filter(isVisibleElement);
+    const lowerCandidates = candidates.filter((el) => {
+        const rect = el.getBoundingClientRect();
+        return rect.top > viewportHeight() * 0.45;
+    });
+    for (const candidate of lowerCandidates) {
+        let best = candidate;
+        let node = candidate;
+        while (node && node !== document.body && node !== document.documentElement) {
+            const rect = node.getBoundingClientRect();
+            const style = window.getComputedStyle(node);
+            const className = node.className.toString();
+            const id = node.id || '';
+            const nameHint = `${className} ${id}`;
+            const isLikelyInputShell = rect.width >= viewportWidth() * 0.5 &&
+                rect.height >= 34 &&
+                rect.height <= Math.min(280, viewportHeight() * 0.38) &&
+                rect.bottom >= viewportHeight() * 0.62 &&
+                (style.position === 'fixed' ||
+                    style.position === 'absolute' ||
+                    style.position === 'sticky' ||
+                    /input|composer|message|textarea|prompt|bar|bottom|container/i.test(nameHint));
+            if (isLikelyInputShell)
+                best = node;
+            node = node.parentElement;
+        }
+        if (best)
+            return best;
     }
-    if (best) return best;
-  }
-  return null;
+    return null;
 }
-function computeBottomAnchor() {
-  const anchor = findInputAnchor();
-  if (!anchor) return DEFAULT_BOTTOM_ANCHOR;
-  const rect = anchor.getBoundingClientRect();
-  const bottom = viewportHeight() - rect.top + INPUT_GAP;
-  return Number.isFinite(bottom) ? Math.max(0, bottom) : DEFAULT_BOTTOM_ANCHOR;
+function computeBottomAnchor(anchor = findInputAnchor()) {
+    if (!anchor)
+        return DEFAULT_BOTTOM_ANCHOR;
+    const rect = anchor.getBoundingClientRect();
+    const bottom = viewportHeight() - rect.top + INPUT_GAP;
+    return Number.isFinite(bottom) ? Math.max(0, bottom) : DEFAULT_BOTTOM_ANCHOR;
 }
 function getClientY(event) {
-  if ("touches" in event) {
-    const touch = event.touches[0] || event.changedTouches[0];
-    return touch ? touch.clientY : null;
-  }
-  return event.clientY;
+    if ('touches' in event) {
+        const touch = event.touches[0] || event.changedTouches[0];
+        return touch ? touch.clientY : null;
+    }
+    return event.clientY;
 }
-function setup(ctx) {
-  const win = window;
-  win[GLOBAL_CLEANUP_KEY]?.();
-  const initialBottom = computeBottomAnchor();
-  const initialHeight = clampHeight(readSavedHeight() ?? DEFAULT_HEIGHT, initialBottom);
-  const removeStyle = ctx.dom.addStyle(`
+function rectsOverlap(a, b, padding = 0) {
+    return !(a.right < b.left - padding ||
+        a.left > b.right + padding ||
+        a.bottom < b.top - padding ||
+        a.top > b.bottom + padding);
+}
+function safeNameHint(el) {
+    return [
+        el.id,
+        el.className?.toString?.() || '',
+        el.getAttribute('data-component') || '',
+        el.getAttribute('data-part') || '',
+        el.getAttribute('data-testid') || '',
+        el.getAttribute('aria-label') || '',
+    ]
+        .join(' ')
+        .toLowerCase();
+}
+function hasOpenPopover(el) {
+    if (!el.hasAttribute('popover'))
+        return false;
+    try {
+        if (el.matches(':popover-open'))
+            return true;
+    }
+    catch {
+        // Some WebViews do not support :popover-open yet.
+    }
+    return isVisibleElement(el);
+}
+function isPotentialBlockingUi(el) {
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    const nameHint = safeNameHint(el);
+    const position = style.position;
+    const zIndex = Number.parseInt(style.zIndex, 10);
+    const floating = position === 'fixed' || position === 'absolute' || position === 'sticky';
+    const hasUsefulZIndex = Number.isFinite(zIndex) && zIndex >= RULER_Z_INDEX;
+    const hasOverlayName = /modal|dialog|drawer|sheet|sidebar|side-bar|popover|popper|dropdown|menu|select|portal|floating|tooltip|overlay|command|cmdk|palette|toast/i.test(nameHint);
+    const hasOverlayRole = /dialog|menu|listbox|tooltip|tree|grid/.test(role);
+    const isLargePanel = rect.width > viewportWidth() * 0.45 && rect.height > viewportHeight() * 0.28;
+    const isBottomUi = rect.bottom > viewportHeight() * 0.55 && rect.width > viewportWidth() * 0.35 && rect.height > 44;
+    return (el.getAttribute('aria-modal') === 'true' ||
+        hasOpenPopover(el) ||
+        (hasOverlayName && (floating || hasUsefulZIndex || isLargePanel || isBottomUi)) ||
+        (hasOverlayRole && (floating || hasUsefulZIndex || isBottomUi)));
+}
+function queryPotentialBlockingElements() {
+    const selectors = [
+        '[role="dialog"]',
+        '[role="menu"]',
+        '[role="listbox"]',
+        '[role="tooltip"]',
+        '[aria-modal="true"]',
+        '[popover]',
+        '[data-radix-popper-content-wrapper]',
+        '[data-radix-portal]',
+        '[data-floating-ui-portal]',
+        '[data-headlessui-portal]',
+        '[data-state="open"]',
+        '[class*="modal"]',
+        '[class*="dialog"]',
+        '[class*="drawer"]',
+        '[class*="sheet"]',
+        '[class*="sidebar"]',
+        '[class*="popover"]',
+        '[class*="popper"]',
+        '[class*="dropdown"]',
+        '[class*="menu"]',
+        '[class*="portal"]',
+        '[class*="overlay"]',
+    ];
+    try {
+        return Array.from(document.querySelectorAll(selectors.join(','))).filter((el) => el instanceof HTMLElement);
+    }
+    catch {
+        return [];
+    }
+}
+function shouldYieldToAppUi(ruler, inputAnchor) {
+    const rulerRect = ruler.getBoundingClientRect();
+    const handleRect = ruler.querySelector('.reading-ruler-handle')?.getBoundingClientRect() || rulerRect;
+    for (const el of queryPotentialBlockingElements()) {
+        if (el === ruler || ruler.contains(el))
+            continue;
+        if (el === inputAnchor)
+            continue;
+        if (!isVisibleElement(el))
+            continue;
+        if (!isPotentialBlockingUi(el))
+            continue;
+        const rect = el.getBoundingClientRect();
+        const hugeOverlay = rect.width > viewportWidth() * 0.72 && rect.height > viewportHeight() * 0.45;
+        const intersectsRuler = rectsOverlap(rect, rulerRect, 10) || rectsOverlap(rect, handleRect, 16);
+        const bottomPopover = rect.bottom > viewportHeight() * 0.52 && rect.width > viewportWidth() * 0.35 && rect.height > 48;
+        if (hugeOverlay || intersectsRuler || bottomPopover)
+            return true;
+    }
+    return false;
+}
+export function setup(ctx) {
+    const win = window;
+    win[GLOBAL_CLEANUP_KEY]?.();
+    const initialAnchor = findInputAnchor();
+    const initialBottom = computeBottomAnchor(initialAnchor);
+    const initialHeight = clampHeight(readSavedHeight() ?? DEFAULT_HEIGHT, initialBottom);
+    const removeStyle = ctx.dom.addStyle(`
     #${ROOT_ID} {
       position: fixed;
       inset-inline: 10px;
       bottom: ${initialBottom}px;
       height: ${initialHeight}px;
-      z-index: 2147483000;
+      z-index: ${RULER_Z_INDEX};
       display: none;
       pointer-events: none;
       user-select: none;
@@ -179,143 +299,160 @@ function setup(ctx) {
       filter: brightness(1.14);
     }
   `);
-  const wrapper = ctx.dom.inject(
-    "body",
-    `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler"></button></div>`,
-    "beforeend"
-  );
-  const ruler = document.getElementById(ROOT_ID);
-  const handle = ruler?.querySelector(".reading-ruler-handle");
-  if (!ruler || !handle) {
-    removeStyle();
-    ctx.dom.uninject(wrapper);
-    return () => void 0;
-  }
-  let dragging = false;
-  let activePointerId = null;
-  let startY = 0;
-  let startHeight = 0;
-  let lastBottomAnchor = initialBottom;
-  let syncFrame = 0;
-  const applyHeight = (nextHeight, persist = true) => {
-    const clamped = clampHeight(nextHeight, lastBottomAnchor);
-    ruler.style.height = `${clamped}px`;
-    if (persist) saveHeight(clamped);
-  };
-  const applyBottomAnchor = (nextBottom) => {
-    lastBottomAnchor = nextBottom;
-    ruler.style.bottom = `${nextBottom}px`;
-    const currentHeight = Number.parseFloat(window.getComputedStyle(ruler).height);
-    applyHeight(Number.isFinite(currentHeight) ? currentHeight : initialHeight, false);
-  };
-  const syncVisibility = () => {
-    const active = isChatRoute();
-    ruler.dataset.active = active ? "true" : "false";
-    if (!active || dragging) return;
-    applyBottomAnchor(computeBottomAnchor());
-    const saved = readSavedHeight();
-    if (saved !== null) applyHeight(saved, false);
-  };
-  const scheduleSync = () => {
-    cancelAnimationFrame(syncFrame);
-    syncFrame = requestAnimationFrame(syncVisibility);
-  };
-  const beginDrag = (event) => {
-    const clientY = getClientY(event);
-    if (clientY === null) return;
-    dragging = true;
-    ruler.dataset.dragging = "true";
-    startY = clientY;
-    startHeight = ruler.getBoundingClientRect().height || initialHeight;
-    if ("pointerId" in event) {
-      activePointerId = event.pointerId;
-      try {
-        handle.setPointerCapture(event.pointerId);
-      } catch {
-      }
+    const wrapper = ctx.dom.inject('body', `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler"></button></div>`, 'beforeend');
+    const ruler = document.getElementById(ROOT_ID);
+    const handle = ruler?.querySelector('.reading-ruler-handle');
+    if (!ruler || !handle) {
+        removeStyle();
+        ctx.dom.uninject(wrapper);
+        return () => undefined;
     }
-    event.preventDefault();
-  };
-  const continueDrag = (event) => {
-    if (!dragging) return;
-    if ("pointerId" in event && activePointerId !== null && event.pointerId !== activePointerId) return;
-    const clientY = getClientY(event);
-    if (clientY === null) return;
-    const delta = startY - clientY;
-    applyHeight(startHeight + delta);
-    event.preventDefault();
-  };
-  const endDrag = (event) => {
-    if ("pointerId" in (event || {}) && activePointerId !== null && event.pointerId !== activePointerId) return;
-    if (event && "pointerId" in event) {
-      try {
-        if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
-      } catch {
-      }
-    }
-    dragging = false;
-    activePointerId = null;
-    ruler.dataset.dragging = "false";
-  };
-  const onResize = () => {
-    applyBottomAnchor(computeBottomAnchor());
-    const saved = readSavedHeight();
-    applyHeight(saved ?? DEFAULT_HEIGHT, false);
-    scheduleSync();
-  };
-  const observer = new MutationObserver(scheduleSync);
-  observer.observe(document.body, { childList: true, subtree: true });
-  const supportsPointer = "PointerEvent" in window;
-  if (supportsPointer) {
-    handle.addEventListener("pointerdown", beginDrag, { passive: false });
-    window.addEventListener("pointermove", continueDrag, { passive: false });
-    window.addEventListener("pointerup", endDrag, { passive: false });
-    window.addEventListener("pointercancel", endDrag, { passive: false });
-  } else {
-    handle.addEventListener("mousedown", beginDrag, { passive: false });
-    window.addEventListener("mousemove", continueDrag, { passive: false });
-    window.addEventListener("mouseup", endDrag, { passive: false });
-    handle.addEventListener("touchstart", beginDrag, { passive: false });
-    window.addEventListener("touchmove", continueDrag, { passive: false });
-    window.addEventListener("touchend", endDrag, { passive: false });
-    window.addEventListener("touchcancel", endDrag, { passive: false });
-  }
-  window.addEventListener("resize", onResize);
-  window.addEventListener("orientationchange", onResize);
-  window.addEventListener("popstate", scheduleSync);
-  window.addEventListener("hashchange", scheduleSync);
-  const interval = window.setInterval(syncVisibility, 500);
-  syncVisibility();
-  const cleanup = () => {
-    cancelAnimationFrame(syncFrame);
-    window.clearInterval(interval);
-    observer.disconnect();
+    let dragging = false;
+    let activePointerId = null;
+    let startY = 0;
+    let startHeight = 0;
+    let lastBottomAnchor = initialBottom;
+    let syncFrame = 0;
+    const applyHeight = (nextHeight, persist = true) => {
+        const clamped = clampHeight(nextHeight, lastBottomAnchor);
+        ruler.style.height = `${clamped}px`;
+        if (persist)
+            saveHeight(clamped);
+    };
+    const applyBottomAnchor = (nextBottom) => {
+        lastBottomAnchor = nextBottom;
+        ruler.style.bottom = `${nextBottom}px`;
+        const currentHeight = Number.parseFloat(window.getComputedStyle(ruler).height);
+        applyHeight(Number.isFinite(currentHeight) ? currentHeight : initialHeight, false);
+    };
+    const syncVisibility = () => {
+        const inputAnchor = findInputAnchor();
+        const activeChat = isChatRoute() && inputAnchor !== null;
+        if (!activeChat || !inputAnchor) {
+            ruler.dataset.active = 'false';
+            return;
+        }
+        if (!dragging) {
+            applyBottomAnchor(computeBottomAnchor(inputAnchor));
+            const saved = readSavedHeight();
+            if (saved !== null)
+                applyHeight(saved, false);
+        }
+        const blockedByUi = !dragging && shouldYieldToAppUi(ruler, inputAnchor);
+        ruler.dataset.active = blockedByUi ? 'false' : 'true';
+    };
+    const scheduleSync = () => {
+        cancelAnimationFrame(syncFrame);
+        syncFrame = requestAnimationFrame(syncVisibility);
+    };
+    const beginDrag = (event) => {
+        const clientY = getClientY(event);
+        if (clientY === null)
+            return;
+        dragging = true;
+        ruler.dataset.dragging = 'true';
+        startY = clientY;
+        startHeight = ruler.getBoundingClientRect().height || initialHeight;
+        if ('pointerId' in event) {
+            activePointerId = event.pointerId;
+            try {
+                handle.setPointerCapture(event.pointerId);
+            }
+            catch {
+                // Window listeners below still handle drag in cranky mobile webviews.
+            }
+        }
+        event.preventDefault();
+    };
+    const continueDrag = (event) => {
+        if (!dragging)
+            return;
+        if ('pointerId' in event && activePointerId !== null && event.pointerId !== activePointerId)
+            return;
+        const clientY = getClientY(event);
+        if (clientY === null)
+            return;
+        const delta = startY - clientY;
+        applyHeight(startHeight + delta);
+        event.preventDefault();
+    };
+    const endDrag = (event) => {
+        if ('pointerId' in (event || {}) && activePointerId !== null && event.pointerId !== activePointerId)
+            return;
+        if (event && 'pointerId' in event) {
+            try {
+                if (handle.hasPointerCapture(event.pointerId))
+                    handle.releasePointerCapture(event.pointerId);
+            }
+            catch {
+                // Ignore pointer-capture cleanup failures.
+            }
+        }
+        dragging = false;
+        activePointerId = null;
+        ruler.dataset.dragging = 'false';
+        scheduleSync();
+    };
+    const onResize = () => {
+        const inputAnchor = findInputAnchor();
+        applyBottomAnchor(computeBottomAnchor(inputAnchor));
+        const saved = readSavedHeight();
+        applyHeight(saved ?? DEFAULT_HEIGHT, false);
+        scheduleSync();
+    };
+    const observer = new MutationObserver(scheduleSync);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'data-state', 'aria-hidden', 'aria-modal', 'popover'] });
+    const supportsPointer = 'PointerEvent' in window;
     if (supportsPointer) {
-      handle.removeEventListener("pointerdown", beginDrag);
-      window.removeEventListener("pointermove", continueDrag);
-      window.removeEventListener("pointerup", endDrag);
-      window.removeEventListener("pointercancel", endDrag);
-    } else {
-      handle.removeEventListener("mousedown", beginDrag);
-      window.removeEventListener("mousemove", continueDrag);
-      window.removeEventListener("mouseup", endDrag);
-      handle.removeEventListener("touchstart", beginDrag);
-      window.removeEventListener("touchmove", continueDrag);
-      window.removeEventListener("touchend", endDrag);
-      window.removeEventListener("touchcancel", endDrag);
+        handle.addEventListener('pointerdown', beginDrag, { passive: false });
+        window.addEventListener('pointermove', continueDrag, { passive: false });
+        window.addEventListener('pointerup', endDrag, { passive: false });
+        window.addEventListener('pointercancel', endDrag, { passive: false });
     }
-    window.removeEventListener("resize", onResize);
-    window.removeEventListener("orientationchange", onResize);
-    window.removeEventListener("popstate", scheduleSync);
-    window.removeEventListener("hashchange", scheduleSync);
-    removeStyle();
-    ctx.dom.uninject(wrapper);
-    ctx.dom.cleanup();
-    if (win[GLOBAL_CLEANUP_KEY] === cleanup) delete win[GLOBAL_CLEANUP_KEY];
-  };
-  win[GLOBAL_CLEANUP_KEY] = cleanup;
-  return cleanup;
+    else {
+        handle.addEventListener('mousedown', beginDrag, { passive: false });
+        window.addEventListener('mousemove', continueDrag, { passive: false });
+        window.addEventListener('mouseup', endDrag, { passive: false });
+        handle.addEventListener('touchstart', beginDrag, { passive: false });
+        window.addEventListener('touchmove', continueDrag, { passive: false });
+        window.addEventListener('touchend', endDrag, { passive: false });
+        window.addEventListener('touchcancel', endDrag, { passive: false });
+    }
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    window.addEventListener('popstate', scheduleSync);
+    window.addEventListener('hashchange', scheduleSync);
+    const interval = window.setInterval(syncVisibility, 500);
+    syncVisibility();
+    const cleanup = () => {
+        cancelAnimationFrame(syncFrame);
+        window.clearInterval(interval);
+        observer.disconnect();
+        if (supportsPointer) {
+            handle.removeEventListener('pointerdown', beginDrag);
+            window.removeEventListener('pointermove', continueDrag);
+            window.removeEventListener('pointerup', endDrag);
+            window.removeEventListener('pointercancel', endDrag);
+        }
+        else {
+            handle.removeEventListener('mousedown', beginDrag);
+            window.removeEventListener('mousemove', continueDrag);
+            window.removeEventListener('mouseup', endDrag);
+            handle.removeEventListener('touchstart', beginDrag);
+            window.removeEventListener('touchmove', continueDrag);
+            window.removeEventListener('touchend', endDrag);
+            window.removeEventListener('touchcancel', endDrag);
+        }
+        window.removeEventListener('resize', onResize);
+        window.removeEventListener('orientationchange', onResize);
+        window.removeEventListener('popstate', scheduleSync);
+        window.removeEventListener('hashchange', scheduleSync);
+        removeStyle();
+        ctx.dom.uninject(wrapper);
+        ctx.dom.cleanup();
+        if (win[GLOBAL_CLEANUP_KEY] === cleanup)
+            delete win[GLOBAL_CLEANUP_KEY];
+    };
+    win[GLOBAL_CLEANUP_KEY] = cleanup;
+    return cleanup;
 }
-export {
-  setup
-};

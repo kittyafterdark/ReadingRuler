@@ -9,6 +9,7 @@ const MIN_HEIGHT = 38
 const TOP_MARGIN = 34
 const DEFAULT_BOTTOM_ANCHOR = 118
 const INPUT_GAP = 8
+const RULER_Z_INDEX = 24
 
 type CleanupWindow = Window & {
   [GLOBAL_CLEANUP_KEY]?: () => void
@@ -18,6 +19,10 @@ type DragPoint = PointerEvent | MouseEvent | TouchEvent
 
 function viewportHeight(): number {
   return window.innerHeight || document.documentElement.clientHeight || 720
+}
+
+function viewportWidth(): number {
+  return window.innerWidth || document.documentElement.clientWidth || 390
 }
 
 function readSavedHeight(): number | null {
@@ -78,7 +83,7 @@ function findInputAnchor(): HTMLElement | null {
       const nameHint = `${className} ${id}`
 
       const isLikelyInputShell =
-        rect.width >= window.innerWidth * 0.5 &&
+        rect.width >= viewportWidth() * 0.5 &&
         rect.height >= 34 &&
         rect.height <= Math.min(280, viewportHeight() * 0.38) &&
         rect.bottom >= viewportHeight() * 0.62 &&
@@ -97,8 +102,7 @@ function findInputAnchor(): HTMLElement | null {
   return null
 }
 
-function computeBottomAnchor(): number {
-  const anchor = findInputAnchor()
+function computeBottomAnchor(anchor: HTMLElement | null = findInputAnchor()): number {
   if (!anchor) return DEFAULT_BOTTOM_ANCHOR
 
   const rect = anchor.getBoundingClientRect()
@@ -115,11 +119,129 @@ function getClientY(event: DragPoint): number | null {
   return event.clientY
 }
 
+function rectsOverlap(a: DOMRect, b: DOMRect, padding = 0): boolean {
+  return !(
+    a.right < b.left - padding ||
+    a.left > b.right + padding ||
+    a.bottom < b.top - padding ||
+    a.top > b.bottom + padding
+  )
+}
+
+function safeNameHint(el: HTMLElement): string {
+  return [
+    el.id,
+    el.className?.toString?.() || '',
+    el.getAttribute('data-component') || '',
+    el.getAttribute('data-part') || '',
+    el.getAttribute('data-testid') || '',
+    el.getAttribute('aria-label') || '',
+  ]
+    .join(' ')
+    .toLowerCase()
+}
+
+function hasOpenPopover(el: HTMLElement): boolean {
+  if (!el.hasAttribute('popover')) return false
+
+  try {
+    if (el.matches(':popover-open')) return true
+  } catch {
+    // Some WebViews do not support :popover-open yet.
+  }
+
+  return isVisibleElement(el)
+}
+
+function isPotentialBlockingUi(el: HTMLElement): boolean {
+  const rect = el.getBoundingClientRect()
+  const style = window.getComputedStyle(el)
+  const role = (el.getAttribute('role') || '').toLowerCase()
+  const nameHint = safeNameHint(el)
+  const position = style.position
+  const zIndex = Number.parseInt(style.zIndex, 10)
+
+  const floating = position === 'fixed' || position === 'absolute' || position === 'sticky'
+  const hasUsefulZIndex = Number.isFinite(zIndex) && zIndex >= RULER_Z_INDEX
+  const hasOverlayName =
+    /modal|dialog|drawer|sheet|sidebar|side-bar|popover|popper|dropdown|menu|select|portal|floating|tooltip|overlay|command|cmdk|palette|toast/i.test(
+      nameHint,
+    )
+  const hasOverlayRole = /dialog|menu|listbox|tooltip|tree|grid/.test(role)
+  const isLargePanel = rect.width > viewportWidth() * 0.45 && rect.height > viewportHeight() * 0.28
+  const isBottomUi = rect.bottom > viewportHeight() * 0.55 && rect.width > viewportWidth() * 0.35 && rect.height > 44
+
+  return (
+    el.getAttribute('aria-modal') === 'true' ||
+    hasOpenPopover(el) ||
+    (hasOverlayName && (floating || hasUsefulZIndex || isLargePanel || isBottomUi)) ||
+    (hasOverlayRole && (floating || hasUsefulZIndex || isBottomUi))
+  )
+}
+
+function queryPotentialBlockingElements(): HTMLElement[] {
+  const selectors = [
+    '[role="dialog"]',
+    '[role="menu"]',
+    '[role="listbox"]',
+    '[role="tooltip"]',
+    '[aria-modal="true"]',
+    '[popover]',
+    '[data-radix-popper-content-wrapper]',
+    '[data-radix-portal]',
+    '[data-floating-ui-portal]',
+    '[data-headlessui-portal]',
+    '[data-state="open"]',
+    '[class*="modal"]',
+    '[class*="dialog"]',
+    '[class*="drawer"]',
+    '[class*="sheet"]',
+    '[class*="sidebar"]',
+    '[class*="popover"]',
+    '[class*="popper"]',
+    '[class*="dropdown"]',
+    '[class*="menu"]',
+    '[class*="portal"]',
+    '[class*="overlay"]',
+  ]
+
+  try {
+    return Array.from(document.querySelectorAll(selectors.join(','))).filter(
+      (el): el is HTMLElement => el instanceof HTMLElement,
+    )
+  } catch {
+    return []
+  }
+}
+
+function shouldYieldToAppUi(ruler: HTMLElement, inputAnchor: HTMLElement): boolean {
+  const rulerRect = ruler.getBoundingClientRect()
+  const handleRect = ruler.querySelector('.reading-ruler-handle')?.getBoundingClientRect() || rulerRect
+
+  for (const el of queryPotentialBlockingElements()) {
+    if (el === ruler || ruler.contains(el)) continue
+    if (el === inputAnchor) continue
+    if (!isVisibleElement(el)) continue
+    if (!isPotentialBlockingUi(el)) continue
+
+    const rect = el.getBoundingClientRect()
+    const hugeOverlay = rect.width > viewportWidth() * 0.72 && rect.height > viewportHeight() * 0.45
+    const intersectsRuler = rectsOverlap(rect, rulerRect, 10) || rectsOverlap(rect, handleRect, 16)
+    const bottomPopover =
+      rect.bottom > viewportHeight() * 0.52 && rect.width > viewportWidth() * 0.35 && rect.height > 48
+
+    if (hugeOverlay || intersectsRuler || bottomPopover) return true
+  }
+
+  return false
+}
+
 export function setup(ctx: SpindleFrontendContext) {
   const win = window as CleanupWindow
   win[GLOBAL_CLEANUP_KEY]?.()
 
-  const initialBottom = computeBottomAnchor()
+  const initialAnchor = findInputAnchor()
+  const initialBottom = computeBottomAnchor(initialAnchor)
   const initialHeight = clampHeight(readSavedHeight() ?? DEFAULT_HEIGHT, initialBottom)
 
   const removeStyle = ctx.dom.addStyle(`
@@ -128,7 +250,7 @@ export function setup(ctx: SpindleFrontendContext) {
       inset-inline: 10px;
       bottom: ${initialBottom}px;
       height: ${initialHeight}px;
-      z-index: 2147483000;
+      z-index: ${RULER_Z_INDEX};
       display: none;
       pointer-events: none;
       user-select: none;
@@ -264,15 +386,22 @@ export function setup(ctx: SpindleFrontendContext) {
   }
 
   const syncVisibility = () => {
-    const active = isChatRoute()
-    ruler.dataset.active = active ? 'true' : 'false'
+    const inputAnchor = findInputAnchor()
+    const activeChat = isChatRoute() && inputAnchor !== null
 
-    if (!active || dragging) return
+    if (!activeChat || !inputAnchor) {
+      ruler.dataset.active = 'false'
+      return
+    }
 
-    applyBottomAnchor(computeBottomAnchor())
+    if (!dragging) {
+      applyBottomAnchor(computeBottomAnchor(inputAnchor))
+      const saved = readSavedHeight()
+      if (saved !== null) applyHeight(saved, false)
+    }
 
-    const saved = readSavedHeight()
-    if (saved !== null) applyHeight(saved, false)
+    const blockedByUi = !dragging && shouldYieldToAppUi(ruler, inputAnchor)
+    ruler.dataset.active = blockedByUi ? 'false' : 'true'
   }
 
   const scheduleSync = () => {
@@ -327,17 +456,19 @@ export function setup(ctx: SpindleFrontendContext) {
     dragging = false
     activePointerId = null
     ruler.dataset.dragging = 'false'
+    scheduleSync()
   }
 
   const onResize = () => {
-    applyBottomAnchor(computeBottomAnchor())
+    const inputAnchor = findInputAnchor()
+    applyBottomAnchor(computeBottomAnchor(inputAnchor))
     const saved = readSavedHeight()
     applyHeight(saved ?? DEFAULT_HEIGHT, false)
     scheduleSync()
   }
 
   const observer = new MutationObserver(scheduleSync)
-  observer.observe(document.body, { childList: true, subtree: true })
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'data-state', 'aria-hidden', 'aria-modal', 'popover'] })
 
   const supportsPointer = 'PointerEvent' in window
 
