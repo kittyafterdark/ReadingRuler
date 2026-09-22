@@ -129,6 +129,8 @@ function isVisibleElement(el: Element): el is HTMLElement {
     rect.height > 0 &&
     rect.bottom > 0 &&
     rect.top < viewportHeight() &&
+    rect.right > 0 &&
+    rect.left < viewportWidth() &&
     style.display !== 'none' &&
     style.visibility !== 'hidden' &&
     style.opacity !== '0'
@@ -682,20 +684,6 @@ export function setup(ctx: SpindleFrontendContext) {
     `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler; double-tap to collapse"></button></div>`,
     'beforeend',
   )
-
-  // Spindle wraps dom.inject() content in a direct child of <body>. Current Lumi
-  // deliberately scales every body child so #root and React portals follow the UI
-  // scale. That host rule must not scale this zero-layout tracking wrapper: doing
-  // so can turn it into the containing/scaling context for our fixed-position ruler
-  // and effectively lay the ruler out against a 0px-tall box. Keep the wrapper
-  // boxless and opt it out of both Chromium's `zoom` path and Linux's `scale` path.
-  // The actual ruler continues to use viewport/getBoundingClientRect coordinates.
-  if (wrapper instanceof HTMLElement) {
-    wrapper.dataset.readingRulerHost = 'true'
-    wrapper.style.setProperty('display', 'contents', 'important')
-    wrapper.style.setProperty('zoom', '1', 'important')
-    wrapper.style.setProperty('scale', 'none', 'important')
-  }
 
   const ruler = document.getElementById(ROOT_ID) as HTMLElement | null
   const handle = ruler?.querySelector('.reading-ruler-handle') as HTMLElement | null

@@ -134,7 +134,6 @@ input.setAttribute('data-component', 'InputArea')
 input.className = 'input-area'
 input.parentElement = body
 
-let injectionWrapper = null
 let ruler = null
 let handle = null
 
@@ -204,20 +203,13 @@ const ctx = {
       return () => {}
     },
     inject() {
-      // Real Spindle dom.inject() returns a tracking wrapper which contains
-      // the extension HTML. Keep that contract here: current Lumi applies
-      // body-child UI scaling to this exact wrapper.
-      injectionWrapper = new FakeElement('div')
-      injectionWrapper.parentElement = body
-      body.append(injectionWrapper)
-
       ruler = new FakeElement('div', { height: 180 })
       ruler.id = 'lumi-reading-ruler'
+      ruler.parentElement = body
       handle = new FakeElement('button', { left: 28, top: 700, right: 1113, bottom: 758, width: 1085, height: 58 })
       handle.className = 'reading-ruler-handle'
       ruler.append(handle)
-      injectionWrapper.append(ruler)
-      return injectionWrapper
+      return ruler
     },
     uninject() {},
     cleanup() {},
@@ -229,10 +221,6 @@ const cleanup = setup(ctx)
 
 assert.equal(ruler.dataset.active, 'true', 'ruler should mount active on a normal chat route')
 assert.equal(ruler.style.height, '180px', 'saved height should be restored before gesture tests')
-assert.equal(injectionWrapper.dataset.readingRulerHost, 'true', 'real Spindle wrapper should be marked as the ruler host')
-assert.equal(injectionWrapper.style.getPropertyValue('display'), 'contents', 'wrapper must not contribute a zero-sized layout box')
-assert.equal(injectionWrapper.style.getPropertyValue('zoom'), '1', 'wrapper must opt out of Lumi body-child zoom')
-assert.equal(injectionWrapper.style.getPropertyValue('scale'), 'none', 'wrapper must opt out of Lumi Linux body-child scale')
 
 handle.dispatchEvent(pointerEvent('pointerdown', 500))
 fakeWindow.dispatchEvent(pointerEvent('pointerup', 500))

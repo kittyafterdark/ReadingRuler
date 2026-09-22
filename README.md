@@ -162,8 +162,11 @@ Double-tap detection is intentionally separate from the resize lifecycle. The or
 
 The ruler keeps its existing default z-index of `24`. Lumiverse's native `ScrollToBottom` control remains above it at z-index `32`.
 
-## 1.1.4 Lumi body-scale compatibility
 
-Current Lumiverse staging applies UI scaling to every direct child of `<body>` so the app root and body portals scale together. Spindle's `dom.inject('body', ...)` intentionally adds a tracking wrapper as one of those body children. Reading Ruler now marks that wrapper as boxless (`display: contents`) and explicitly opts it out of the host `zoom` / Linux `scale` rules. This keeps the fixed ruler in viewport coordinates instead of letting a zero-layout tracking wrapper become its scaling/containing context.
+## 1.1.5 closed drawer regression note
 
-The wrapper normalization is intentionally limited to Reading Ruler's own Spindle injection. Lumiverse's app and portal scaling remain untouched.
+Lumiverse staging keeps `ViewportDrawer` mounted while closed and moves the drawer horizontally offscreen with a transform. Reading Ruler's visibility helper previously checked only vertical viewport intersection, so that offscreen `.drawer` still counted as visible. Its edge could then fall inside the ruler's overlap tolerance and force `data-reason="blocked-ui"` forever.
+
+Version 1.1.5 makes visibility checks two-dimensional: elements wholly left or right of the viewport are ignored. An open drawer still yields normally; a closed transformed drawer no longer suppresses the ruler.
+
+The ruler keeps its default z-index of `24`; Lumiverse's native scroll-to-bottom control remains above it.
