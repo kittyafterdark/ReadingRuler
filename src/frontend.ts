@@ -17,6 +17,8 @@ const MIN_RULER_WIDTH = 180
 const MAX_EDGE_PANEL_WIDTH = 680
 const MOBILE_BREAKPOINT = 760
 const MOBILE_YIELD_UI = 0
+const DOUBLE_TAP_WINDOW_MS = 340
+const TAP_MOVE_TOLERANCE = 8
 
 type CleanupWindow = Window & {
   [GLOBAL_CLEANUP_KEY]?: () => void
@@ -677,7 +679,7 @@ export function setup(ctx: SpindleFrontendContext) {
 
   const wrapper = ctx.dom.inject(
     'body',
-    `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler"></button></div>`,
+    `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler; double-tap to collapse"></button></div>`,
     'beforeend',
   )
 
@@ -694,6 +696,8 @@ export function setup(ctx: SpindleFrontendContext) {
   let activePointerId: number | null = null
   let startY = 0
   let startHeight = 0
+  let gestureMoved = false
+  let lastTapAt = 0
   let lastBottomAnchor = initialBottom
   let syncFrame = 0
   let enabled = readEnabled()
@@ -796,6 +800,7 @@ export function setup(ctx: SpindleFrontendContext) {
     ruler.dataset.dragging = 'true'
     startY = clientY
     startHeight = ruler.getBoundingClientRect().height || initialHeight
+    gestureMoved = false
 
     if ('pointerId' in event) {
       activePointerId = event.pointerId
@@ -817,12 +822,17 @@ export function setup(ctx: SpindleFrontendContext) {
     if (clientY === null) return
 
     const delta = startY - clientY
+    if (Math.abs(delta) > TAP_MOVE_TOLERANCE) gestureMoved = true
     applyHeight(startHeight + delta)
     event.preventDefault()
   }
 
   const endDrag = (event?: DragPoint) => {
     if ('pointerId' in (event || {}) && activePointerId !== null && (event as PointerEvent).pointerId !== activePointerId) return
+
+    const endY = event ? getClientY(event) : null
+    const cancelled = event?.type === 'pointercancel' || event?.type === 'touchcancel'
+    const moved = gestureMoved || (endY !== null && Math.abs(startY - endY) > TAP_MOVE_TOLERANCE)
 
     if (event && 'pointerId' in event) {
       try {
@@ -835,6 +845,19 @@ export function setup(ctx: SpindleFrontendContext) {
     dragging = false
     activePointerId = null
     ruler.dataset.dragging = 'false'
+
+    if (event && !cancelled && !moved) {
+      const now = performance.now()
+      if (lastTapAt > 0 && now - lastTapAt <= DOUBLE_TAP_WINDOW_MS) {
+        lastTapAt = 0
+        applyHeight(minHeight(ruler))
+      } else {
+        lastTapAt = now
+      }
+    } else {
+      lastTapAt = 0
+    }
+
     scheduleSync()
   }
 

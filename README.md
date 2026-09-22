@@ -8,6 +8,7 @@ Tiny frontend-only Lumiverse extension that adds a frosted glass reading/censor 
 - Anchors near the input/composer area.
 - Drag the pill handle upward to expand the frosted glass curtain.
 - Drag the pill handle downward to collapse it.
+- Double-tap/click the pill handle to snap directly to the minimum collapsed height (`--lrr-min-height`, 38px by default). Movement beyond the small tap tolerance is excluded from double-tap detection.
 - The body ignores pointer events so normal scrolling/tapping is not blocked.
 - The ruler yields to app UI: modals, dropdowns, and input popovers should appear above it or temporarily hide it.
 - On desktop, the ruler avoids edge-mounted side panels/dock panels by shrinking away from the left/right edge when one is visible. On mobile, side-panel avoidance is disabled and overlay hiding is conservative, so app chrome should not suppress the ruler forever.
@@ -95,6 +96,7 @@ lumi-reading-ruler/
 ├── tsconfig.json
 ├── README.md
 ├── src/frontend.ts
+├── tests/double-tap-collapse.test.mjs
 └── dist/frontend.js
 ```
 
@@ -153,3 +155,8 @@ This keeps settings, sidebars, drawers, and other app UI from being covered by a
 ## 1.1.1 route guard note
 
 Version 1.1.1 removes the broad mobile body-text fallback and stops checking `window.location.href` for chat detection. The live domain is `lumiverse.chat`, so checking the full URL made the home/continue screen look like a chat screen. The ruler now activates only on `/chat/:chatId`-style routes or when a real Lumi message composer is visible on mobile.
+
+
+## 1.1.2 double-tap collapse note
+
+Double-tapping (or double-clicking) the resize handle now snaps the ruler to its themed minimum height. The gesture ignores presses that move more than a small drag tolerance, so ordinary resizing does not accidentally collapse the ruler.

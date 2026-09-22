@@ -1,10 +1,11 @@
 {
   "name": "lumi-reading-ruler",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build src/frontend.ts --outfile dist/frontend.js --target browser"
+    "build": "bun build src/frontend.ts --outfile dist/frontend.js --target browser",
+    "test": "node tests/double-tap-collapse.test.mjs"
   },
   "devDependencies": {
     "lumiverse-spindle-types": "latest"
