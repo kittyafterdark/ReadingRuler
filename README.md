@@ -8,6 +8,7 @@ Tiny frontend-only Lumiverse extension that adds a frosted glass reading/censor 
 - Anchors near the input/composer area.
 - Drag the pill handle upward to expand the frosted glass curtain.
 - Drag the pill handle downward to collapse it.
+- Double-tap/double-click the pill handle to snap back to `--lrr-min-height` (38px by default).
 - The body ignores pointer events so normal scrolling/tapping is not blocked.
 - The ruler yields to app UI: modals, dropdowns, and input popovers should appear above it or temporarily hide it.
 - On desktop, the ruler avoids edge-mounted side panels/dock panels by shrinking away from the left/right edge when one is visible. On mobile, side-panel avoidance is disabled and overlay hiding is conservative, so app chrome should not suppress the ruler forever.
@@ -153,3 +154,16 @@ This keeps settings, sidebars, drawers, and other app UI from being covered by a
 ## 1.1.1 route guard note
 
 Version 1.1.1 removes the broad mobile body-text fallback and stops checking `window.location.href` for chat detection. The live domain is `lumiverse.chat`, so checking the full URL made the home/continue screen look like a chat screen. The ruler now activates only on `/chat/:chatId`-style routes or when a real Lumi message composer is visible on mobile.
+
+
+## 1.1.3 double-tap note
+
+Double-tap detection is intentionally separate from the resize lifecycle. The original 1.1.1 drag, mount, visibility, and cleanup paths remain unchanged; a small Pointer Events observer only watches for two clean taps within 340ms. Moving more than 8px cancels the tap chain, so normal drags do not collapse the ruler.
+
+The ruler keeps its existing default z-index of `24`. Lumiverse's native `ScrollToBottom` control remains above it at z-index `32`.
+
+## 1.1.4 Lumi body-scale compatibility
+
+Current Lumiverse staging applies UI scaling to every direct child of `<body>` so the app root and body portals scale together. Spindle's `dom.inject('body', ...)` intentionally adds a tracking wrapper as one of those body children. Reading Ruler now marks that wrapper as boxless (`display: contents`) and explicitly opts it out of the host `zoom` / Linux `scale` rules. This keeps the fixed ruler in viewport coordinates instead of letting a zero-layout tracking wrapper become its scaling/containing context.
+
+The wrapper normalization is intentionally limited to Reading Ruler's own Spindle injection. Lumiverse's app and portal scaling remain untouched.

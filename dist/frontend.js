@@ -14,6 +14,8 @@ const MIN_RULER_WIDTH = 180;
 const MAX_EDGE_PANEL_WIDTH = 680;
 const MOBILE_BREAKPOINT = 760;
 const MOBILE_YIELD_UI = 0;
+const DOUBLE_TAP_WINDOW_MS = 340;
+const TAP_MOVE_TOLERANCE = 8;
 function viewportHeight() {
     return window.innerHeight || document.documentElement.clientHeight || 720;
 }
@@ -572,7 +574,20 @@ export function setup(ctx) {
 
 
   `);
-    const wrapper = ctx.dom.inject('body', `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler"></button></div>`, 'beforeend');
+    const wrapper = ctx.dom.inject('body', `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler; double-tap to collapse"></button></div>`, 'beforeend');
+    // Spindle wraps dom.inject() content in a direct child of <body>. Current Lumi
+    // deliberately scales every body child so #root and React portals follow the UI
+    // scale. That host rule must not scale this zero-layout tracking wrapper: doing
+    // so can turn it into the containing/scaling context for our fixed-position ruler
+    // and effectively lay the ruler out against a 0px-tall box. Keep the wrapper
+    // boxless and opt it out of both Chromium's `zoom` path and Linux's `scale` path.
+    // The actual ruler continues to use viewport/getBoundingClientRect coordinates.
+    if (wrapper instanceof HTMLElement) {
+        wrapper.dataset.readingRulerHost = 'true';
+        wrapper.style.setProperty('display', 'contents', 'important');
+        wrapper.style.setProperty('zoom', '1', 'important');
+        wrapper.style.setProperty('scale', 'none', 'important');
+    }
     const ruler = document.getElementById(ROOT_ID);
     const handle = ruler?.querySelector('.reading-ruler-handle');
     if (!ruler || !handle) {
@@ -584,6 +599,10 @@ export function setup(ctx) {
     let activePointerId = null;
     let startY = 0;
     let startHeight = 0;
+    let tapPointerId = null;
+    let tapStartY = 0;
+    let tapMoved = false;
+    let lastTapAt = 0;
     let lastBottomAnchor = initialBottom;
     let syncFrame = 0;
     let enabled = readEnabled();
@@ -717,6 +736,55 @@ export function setup(ctx) {
         ruler.dataset.dragging = 'false';
         scheduleSync();
     };
+    const collapseToMinimum = () => {
+        lastTapAt = 0;
+        applyHeight(minHeight(ruler));
+        scheduleSync();
+    };
+    const registerCleanTap = () => {
+        const now = Date.now();
+        if (lastTapAt > 0 && now - lastTapAt <= DOUBLE_TAP_WINDOW_MS) {
+            collapseToMinimum();
+            return;
+        }
+        lastTapAt = now;
+    };
+    const onTapPointerDown = (event) => {
+        if (event.isPrimary === false)
+            return;
+        tapPointerId = event.pointerId;
+        tapStartY = event.clientY;
+        tapMoved = false;
+    };
+    const onTapPointerMove = (event) => {
+        if (tapPointerId === null || event.pointerId !== tapPointerId)
+            return;
+        if (Math.abs(event.clientY - tapStartY) > TAP_MOVE_TOLERANCE)
+            tapMoved = true;
+    };
+    const onTapPointerUp = (event) => {
+        if (tapPointerId === null || event.pointerId !== tapPointerId)
+            return;
+        const moved = tapMoved || Math.abs(event.clientY - tapStartY) > TAP_MOVE_TOLERANCE;
+        tapPointerId = null;
+        tapMoved = false;
+        if (moved) {
+            lastTapAt = 0;
+            return;
+        }
+        registerCleanTap();
+    };
+    const onTapPointerCancel = (event) => {
+        if (tapPointerId !== null && event.pointerId !== tapPointerId)
+            return;
+        tapPointerId = null;
+        tapMoved = false;
+        lastTapAt = 0;
+    };
+    const onHandleDoubleClick = (event) => {
+        event.preventDefault();
+        collapseToMinimum();
+    };
     const onResize = () => {
         const inputAnchor = findInputAnchor();
         applyBottomAnchor(computeBottomAnchor(inputAnchor), inputAnchor);
@@ -773,6 +841,12 @@ export function setup(ctx) {
         window.addEventListener('pointermove', continueDrag, { passive: false });
         window.addEventListener('pointerup', endDrag, { passive: false });
         window.addEventListener('pointercancel', endDrag, { passive: false });
+        // Observe taps independently from the resize lifecycle. Keeping these listeners
+        // separate means the original drag/mount/visibility path remains untouched.
+        handle.addEventListener('pointerdown', onTapPointerDown, { passive: true });
+        window.addEventListener('pointermove', onTapPointerMove, { passive: true });
+        window.addEventListener('pointerup', onTapPointerUp, { passive: true });
+        window.addEventListener('pointercancel', onTapPointerCancel, { passive: true });
     }
     else {
         handle.addEventListener('mousedown', beginDrag, { passive: false });
@@ -783,6 +857,7 @@ export function setup(ctx) {
         window.addEventListener('touchend', endDrag, { passive: false });
         window.addEventListener('touchcancel', endDrag, { passive: false });
     }
+    handle.addEventListener('dblclick', onHandleDoubleClick, { passive: false });
     window.addEventListener('resize', onResize);
     window.addEventListener('orientationchange', onResize);
     window.addEventListener('popstate', scheduleSync);
@@ -798,6 +873,10 @@ export function setup(ctx) {
             window.removeEventListener('pointermove', continueDrag);
             window.removeEventListener('pointerup', endDrag);
             window.removeEventListener('pointercancel', endDrag);
+            handle.removeEventListener('pointerdown', onTapPointerDown);
+            window.removeEventListener('pointermove', onTapPointerMove);
+            window.removeEventListener('pointerup', onTapPointerUp);
+            window.removeEventListener('pointercancel', onTapPointerCancel);
         }
         else {
             handle.removeEventListener('mousedown', beginDrag);
@@ -808,6 +887,7 @@ export function setup(ctx) {
             window.removeEventListener('touchend', endDrag);
             window.removeEventListener('touchcancel', endDrag);
         }
+        handle.removeEventListener('dblclick', onHandleDoubleClick);
         window.removeEventListener('resize', onResize);
         window.removeEventListener('orientationchange', onResize);
         window.removeEventListener('popstate', scheduleSync);
