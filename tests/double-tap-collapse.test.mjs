@@ -40,8 +40,35 @@ class FakeElement extends EventTarget {
   }
 
   append(child) {
+    return this.appendChild(child)
+  }
+
+  appendChild(child) {
+    if (child.parentElement && child.parentElement !== this) {
+      child.parentElement.children = child.parentElement.children.filter((item) => item !== child)
+    }
     child.parentElement = this
-    this.children.push(child)
+    if (!this.children.includes(child)) this.children.push(child)
+    return child
+  }
+
+  get isConnected() {
+    let node = this
+    while (node) {
+      if (node === body) return true
+      node = node.parentElement
+    }
+    return false
+  }
+
+  closest(selector) {
+    const ownerAttrs = ['data-spindle-ext', 'data-spindle-extension-root', 'data-spindle-extension-id', 'data-spindle-ext-id']
+    let node = this
+    while (node) {
+      if (ownerAttrs.some((attr) => selector.includes(attr) && node.hasAttribute?.(attr))) return node
+      node = node.parentElement
+    }
+    return null
   }
 
   contains(candidate) {
@@ -203,13 +230,16 @@ const ctx = {
       return () => {}
     },
     inject() {
+      const wrapper = new FakeElement('div')
+      wrapper.setAttribute('data-spindle-ext', 'reading-ruler-test')
       ruler = new FakeElement('div', { height: 180 })
       ruler.id = 'lumi-reading-ruler'
-      ruler.parentElement = body
       handle = new FakeElement('button', { left: 28, top: 700, right: 1113, bottom: 758, width: 1085, height: 58 })
       handle.className = 'reading-ruler-handle'
       ruler.append(handle)
-      return ruler
+      wrapper.append(ruler)
+      body.append(wrapper)
+      return wrapper
     },
     uninject() {},
     cleanup() {},

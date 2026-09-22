@@ -1,402 +1,488 @@
-// src/frontend.ts
-var ROOT_ID = "lumi-reading-ruler";
-var STORAGE_KEY = "lumi-reading-ruler-v3-height";
-var STORAGE_ENABLED_KEY = "lumi-reading-ruler-enabled";
-var GLOBAL_CLEANUP_KEY = "__lumiReadingRulerCleanup";
-var DEFAULT_HEIGHT = 84;
-var MIN_HEIGHT = 38;
-var TOP_MARGIN = 34;
-var DEFAULT_BOTTOM_ANCHOR = 118;
-var INPUT_GAP = 8;
-var RULER_Z_INDEX = 24;
-var SIDE_INSET = 10;
-var SIDE_PANEL_GAP = 8;
-var MIN_RULER_WIDTH = 180;
-var MAX_EDGE_PANEL_WIDTH = 680;
-var MOBILE_BREAKPOINT = 760;
-var MOBILE_YIELD_UI = 0;
-var DOUBLE_TAP_WINDOW_MS = 340;
-var TAP_MOVE_TOLERANCE = 8;
+const ROOT_ID = 'lumi-reading-ruler';
+const STORAGE_KEY = 'lumi-reading-ruler-v3-height';
+const STORAGE_ENABLED_KEY = 'lumi-reading-ruler-enabled';
+const GLOBAL_CLEANUP_KEY = '__lumiReadingRulerCleanup';
+const DEFAULT_HEIGHT = 84;
+const MIN_HEIGHT = 38;
+const TOP_MARGIN = 34;
+const DEFAULT_BOTTOM_ANCHOR = 118;
+const INPUT_GAP = 8;
+const RULER_Z_INDEX = 24;
+const SIDE_INSET = 10;
+const SIDE_PANEL_GAP = 8;
+const MIN_RULER_WIDTH = 180;
+const MAX_EDGE_PANEL_WIDTH = 680;
+const MOBILE_BREAKPOINT = 760;
+const MOBILE_YIELD_UI = 0;
+const DOUBLE_TAP_WINDOW_MS = 340;
+const TAP_MOVE_TOLERANCE = 8;
 function viewportHeight() {
-  return window.innerHeight || document.documentElement.clientHeight || 720;
+    return window.innerHeight || document.documentElement.clientHeight || 720;
 }
 function viewportWidth() {
-  return window.innerWidth || document.documentElement.clientWidth || 390;
+    return window.innerWidth || document.documentElement.clientWidth || 390;
 }
 function readCssNumber(name, fallback, el) {
-  const sources = [];
-  if (el)
-    sources.push(el);
-  sources.push(document.documentElement);
-  for (const source of sources) {
-    const raw = window.getComputedStyle(source).getPropertyValue(name).trim();
-    if (!raw)
-      continue;
-    const parsed = Number.parseFloat(raw);
-    if (Number.isFinite(parsed))
-      return parsed;
-  }
-  return fallback;
+    const sources = [];
+    if (el)
+        sources.push(el);
+    sources.push(document.documentElement);
+    for (const source of sources) {
+        const raw = window.getComputedStyle(source).getPropertyValue(name).trim();
+        if (!raw)
+            continue;
+        const parsed = Number.parseFloat(raw);
+        if (Number.isFinite(parsed))
+            return parsed;
+    }
+    return fallback;
 }
 function minHeight(ruler) {
-  return readCssNumber("--lrr-min-height", MIN_HEIGHT, ruler);
+    return readCssNumber('--lrr-min-height', MIN_HEIGHT, ruler);
 }
 function topMargin(ruler) {
-  return readCssNumber("--lrr-top-margin", TOP_MARGIN, ruler);
+    return readCssNumber('--lrr-top-margin', TOP_MARGIN, ruler);
 }
 function sideInset(ruler) {
-  return readCssNumber("--lrr-side-inset", SIDE_INSET, ruler);
+    return readCssNumber('--lrr-side-inset', SIDE_INSET, ruler);
 }
 function sidePanelGap(ruler) {
-  return readCssNumber("--lrr-side-panel-gap", SIDE_PANEL_GAP, ruler);
+    return readCssNumber('--lrr-side-panel-gap', SIDE_PANEL_GAP, ruler);
 }
 function minRulerWidth(ruler) {
-  return readCssNumber("--lrr-min-width", MIN_RULER_WIDTH, ruler);
+    return readCssNumber('--lrr-min-width', MIN_RULER_WIDTH, ruler);
 }
 function maxEdgePanelWidth(ruler) {
-  const cssValue = readCssNumber("--lrr-max-edge-panel-width", Number.NaN, ruler);
-  const defaultValue = Math.min(MAX_EDGE_PANEL_WIDTH, viewportWidth() * 0.48);
-  return Number.isFinite(cssValue) ? cssValue : defaultValue;
+    const cssValue = readCssNumber('--lrr-max-edge-panel-width', Number.NaN, ruler);
+    const defaultValue = Math.min(MAX_EDGE_PANEL_WIDTH, viewportWidth() * 0.48);
+    return Number.isFinite(cssValue) ? cssValue : defaultValue;
 }
 function zIndexThreshold() {
-  return readCssNumber("--lrr-z-index", RULER_Z_INDEX);
+    return readCssNumber('--lrr-z-index', RULER_Z_INDEX);
 }
 function mobileBreakpoint(ruler) {
-  return readCssNumber("--lrr-mobile-breakpoint", MOBILE_BREAKPOINT, ruler);
+    return readCssNumber('--lrr-mobile-breakpoint', MOBILE_BREAKPOINT, ruler);
 }
 function mobileYieldUi(ruler) {
-  return readCssNumber("--lrr-mobile-yield-ui", MOBILE_YIELD_UI, ruler) >= 0.5;
+    return readCssNumber('--lrr-mobile-yield-ui', MOBILE_YIELD_UI, ruler) >= 0.5;
 }
 function readEnabled() {
-  const raw = window.localStorage.getItem(STORAGE_ENABLED_KEY);
-  if (raw === null)
-    return true;
-  return raw !== "0" && raw !== "false";
+    const raw = window.localStorage.getItem(STORAGE_ENABLED_KEY);
+    if (raw === null)
+        return true;
+    return raw !== '0' && raw !== 'false';
 }
 function saveEnabled(value) {
-  window.localStorage.setItem(STORAGE_ENABLED_KEY, value ? "1" : "0");
+    window.localStorage.setItem(STORAGE_ENABLED_KEY, value ? '1' : '0');
 }
 function isMobileViewport(ruler) {
-  return viewportWidth() <= mobileBreakpoint(ruler);
+    return viewportWidth() <= mobileBreakpoint(ruler);
 }
 function readSavedHeight() {
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
-  return Number.isFinite(parsed) ? parsed : null;
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
+    return Number.isFinite(parsed) ? parsed : null;
 }
 function saveHeight(value) {
-  window.localStorage.setItem(STORAGE_KEY, String(Math.round(value)));
+    window.localStorage.setItem(STORAGE_KEY, String(Math.round(value)));
 }
 function clampHeight(value, bottomAnchor, ruler) {
-  const min = minHeight(ruler);
-  const maxHeight = Math.max(min, viewportHeight() - bottomAnchor - topMargin(ruler));
-  return Math.max(min, Math.min(maxHeight, value));
+    const min = minHeight(ruler);
+    const maxHeight = Math.max(min, viewportHeight() - bottomAnchor - topMargin(ruler));
+    return Math.max(min, Math.min(maxHeight, value));
 }
 function isVisibleElement(el) {
-  if (!(el instanceof HTMLElement))
-    return false;
-  const rect = el.getBoundingClientRect();
-  const style = window.getComputedStyle(el);
-  return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < viewportHeight() && rect.right > 0 && rect.left < viewportWidth() && style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0";
+    if (!(el instanceof HTMLElement))
+        return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    return (rect.width > 0 &&
+        rect.height > 0 &&
+        rect.bottom > 0 &&
+        rect.top < viewportHeight() &&
+        rect.right > 0 &&
+        rect.left < viewportWidth() &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        style.opacity !== '0');
+}
+const SPINDLE_EXTENSION_OWNER_SELECTOR = '[data-spindle-ext], [data-spindle-extension-root], [data-spindle-extension-id], [data-spindle-ext-id]';
+function isSpindleExtensionOwned(el) {
+    try {
+        return Boolean(el.closest(SPINDLE_EXTENSION_OWNER_SELECTOR));
+    }
+    catch {
+        return false;
+    }
+}
+function findChatSurfaceMount() {
+    const mount = document.querySelector('[data-spindle-mount="chat_surface_side"]');
+    return mount instanceof HTMLElement ? mount : null;
 }
 function routeText() {
-  return [window.location.pathname, window.location.hash, window.location.search].join(" ").toLowerCase();
+    // Do not include window.location.href here. The production domain is
+    // lumiverse.chat, so a naive /chat/ test on href makes every screen look
+    // like a chat screen. Ask me how I know.
+    return [window.location.pathname, window.location.hash, window.location.search]
+        .join(' ')
+        .toLowerCase();
 }
 function isChatRoute() {
-  return /(?:^|[#/?&])chats?(?:\/|%2f)[^\s?#&]+/.test(routeText());
+    return /(?:^|[#/?&])chats?(?:\/|%2f)[^\s?#&]+/.test(routeText());
 }
 function looksLikeMobileChatScreen() {
-  if (!isMobileViewport())
+    if (!isMobileViewport())
+        return false;
+    if (isChatRoute())
+        return true;
+    if (document.querySelector('[data-component="InputArea"]'))
+        return true;
+    if (document.querySelector('[placeholder*="message" i], [aria-label*="message" i]'))
+        return true;
+    // No body-text fallback. The landing page says "Continue your story",
+    // which previously made the home grid count as chat and spawned the ruler
+    // over character cards.
     return false;
-  if (isChatRoute())
-    return true;
-  if (document.querySelector('[data-component="InputArea"]'))
-    return true;
-  if (document.querySelector('[placeholder*="message" i], [aria-label*="message" i]'))
-    return true;
-  return false;
 }
 function findInputShellCandidates() {
-  const selectors = [
-    '[data-component="InputArea"]',
-    '[data-testid*="input" i]',
-    '[data-testid*="composer" i]',
-    '[aria-label*="message" i]',
-    '[class*="inputarea" i]',
-    '[class*="input-area" i]',
-    '[class*="composer" i]',
-    '[class*="messageinput" i]',
-    '[class*="message-input" i]',
-    '[class*="chatinput" i]',
-    '[class*="chat-input" i]',
-    '[class*="promptinput" i]',
-    '[class*="prompt-input" i]'
-  ];
-  try {
-    return Array.from(document.querySelectorAll(selectors.join(","))).filter((el) => el instanceof HTMLElement).filter(isVisibleElement).filter((el) => {
-      const rect = el.getBoundingClientRect();
-      return rect.width >= viewportWidth() * 0.42 && rect.height >= 32 && rect.height <= Math.min(340, viewportHeight() * 0.44) && rect.bottom >= viewportHeight() * 0.56;
-    }).sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
-  } catch {
-    return [];
-  }
+    const selectors = [
+        '[data-component="InputArea"]',
+        '[data-testid*="input" i]',
+        '[data-testid*="composer" i]',
+        '[aria-label*="message" i]',
+        '[class*="inputarea" i]',
+        '[class*="input-area" i]',
+        '[class*="composer" i]',
+        '[class*="messageinput" i]',
+        '[class*="message-input" i]',
+        '[class*="chatinput" i]',
+        '[class*="chat-input" i]',
+        '[class*="promptinput" i]',
+        '[class*="prompt-input" i]',
+    ];
+    try {
+        return Array.from(document.querySelectorAll(selectors.join(',')))
+            .filter((el) => el instanceof HTMLElement)
+            .filter(isVisibleElement)
+            .filter((el) => {
+            const rect = el.getBoundingClientRect();
+            return (rect.width >= viewportWidth() * 0.42 &&
+                rect.height >= 32 &&
+                rect.height <= Math.min(340, viewportHeight() * 0.44) &&
+                rect.bottom >= viewportHeight() * 0.56);
+        })
+            .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
+    }
+    catch {
+        return [];
+    }
 }
 function findInputAnchor() {
-  const shell = findInputShellCandidates()[0];
-  if (shell)
-    return shell;
-  const candidates = Array.from(document.querySelectorAll('textarea, [contenteditable="true"], [contenteditable=""], [role="textbox"], input[type="text"], input:not([type]), input[placeholder*="message" i], textarea[placeholder*="message" i]')).filter(isVisibleElement);
-  const lowerCandidates = candidates.filter((el) => {
-    const rect = el.getBoundingClientRect();
-    return rect.bottom > viewportHeight() * 0.5;
-  }).sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
-  for (const candidate of lowerCandidates) {
-    let best = candidate;
-    let node = candidate;
-    while (node && node !== document.body && node !== document.documentElement) {
-      const rect = node.getBoundingClientRect();
-      const style = window.getComputedStyle(node);
-      const className = node.className.toString();
-      const id = node.id || "";
-      const dataComponent = node.getAttribute("data-component") || "";
-      const dataPart = node.getAttribute("data-part") || "";
-      const aria = node.getAttribute("aria-label") || "";
-      const nameHint = `${className} ${id} ${dataComponent} ${dataPart} ${aria}`;
-      const isLikelyInputShell = rect.width >= viewportWidth() * 0.42 && rect.height >= 32 && rect.height <= Math.min(340, viewportHeight() * 0.44) && rect.bottom >= viewportHeight() * 0.56 && (style.position === "fixed" || style.position === "absolute" || style.position === "sticky" || /input|composer|message|textarea|prompt|bar|bottom|container/i.test(nameHint));
-      if (isLikelyInputShell)
-        best = node;
-      node = node.parentElement;
+    // Lumi exposes the composer as data-component="InputArea" in current desktop/mobile
+    // builds. Prefer the shell when available; mobile sometimes does not expose a normal
+    // textarea/input until focus, which made the older builds hide forever.
+    const shell = findInputShellCandidates()[0];
+    if (shell)
+        return shell;
+    const candidates = Array.from(document.querySelectorAll('textarea, [contenteditable="true"], [contenteditable=""], [role="textbox"], input[type="text"], input:not([type]), input[placeholder*="message" i], textarea[placeholder*="message" i]')).filter(isVisibleElement);
+    const lowerCandidates = candidates
+        .filter((el) => {
+        const rect = el.getBoundingClientRect();
+        return rect.bottom > viewportHeight() * 0.50;
+    })
+        .sort((a, b) => b.getBoundingClientRect().bottom - a.getBoundingClientRect().bottom);
+    for (const candidate of lowerCandidates) {
+        let best = candidate;
+        let node = candidate;
+        while (node && node !== document.body && node !== document.documentElement) {
+            const rect = node.getBoundingClientRect();
+            const style = window.getComputedStyle(node);
+            const className = node.className.toString();
+            const id = node.id || '';
+            const dataComponent = node.getAttribute('data-component') || '';
+            const dataPart = node.getAttribute('data-part') || '';
+            const aria = node.getAttribute('aria-label') || '';
+            const nameHint = `${className} ${id} ${dataComponent} ${dataPart} ${aria}`;
+            const isLikelyInputShell = rect.width >= viewportWidth() * 0.42 &&
+                rect.height >= 32 &&
+                rect.height <= Math.min(340, viewportHeight() * 0.44) &&
+                rect.bottom >= viewportHeight() * 0.56 &&
+                (style.position === 'fixed' ||
+                    style.position === 'absolute' ||
+                    style.position === 'sticky' ||
+                    /input|composer|message|textarea|prompt|bar|bottom|container/i.test(nameHint));
+            if (isLikelyInputShell)
+                best = node;
+            node = node.parentElement;
+        }
+        if (best)
+            return best;
     }
-    if (best)
-      return best;
-  }
-  return null;
+    return null;
 }
 function computeBottomAnchor(anchor = findInputAnchor()) {
-  if (!anchor)
-    return DEFAULT_BOTTOM_ANCHOR;
-  const rect = anchor.getBoundingClientRect();
-  const bottom = viewportHeight() - rect.top + INPUT_GAP;
-  return Number.isFinite(bottom) ? Math.max(0, bottom) : DEFAULT_BOTTOM_ANCHOR;
+    if (!anchor)
+        return DEFAULT_BOTTOM_ANCHOR;
+    const rect = anchor.getBoundingClientRect();
+    const bottom = viewportHeight() - rect.top + INPUT_GAP;
+    return Number.isFinite(bottom) ? Math.max(0, bottom) : DEFAULT_BOTTOM_ANCHOR;
 }
 function getClientY(event) {
-  if ("touches" in event) {
-    const touch = event.touches[0] || event.changedTouches[0];
-    return touch ? touch.clientY : null;
-  }
-  return event.clientY;
+    if ('touches' in event) {
+        const touch = event.touches[0] || event.changedTouches[0];
+        return touch ? touch.clientY : null;
+    }
+    return event.clientY;
 }
 function rectsOverlap(a, b, padding = 0) {
-  return !(a.right < b.left - padding || a.left > b.right + padding || a.bottom < b.top - padding || a.top > b.bottom + padding);
+    return !(a.right < b.left - padding ||
+        a.left > b.right + padding ||
+        a.bottom < b.top - padding ||
+        a.top > b.bottom + padding);
 }
 function safeNameHint(el) {
-  return [
-    el.id,
-    el.className?.toString?.() || "",
-    el.getAttribute("data-component") || "",
-    el.getAttribute("data-part") || "",
-    el.getAttribute("data-testid") || "",
-    el.getAttribute("aria-label") || ""
-  ].join(" ").toLowerCase();
+    return [
+        el.id,
+        el.className?.toString?.() || '',
+        el.getAttribute('data-component') || '',
+        el.getAttribute('data-part') || '',
+        el.getAttribute('data-testid') || '',
+        el.getAttribute('aria-label') || '',
+    ]
+        .join(' ')
+        .toLowerCase();
 }
 function hasOpenPopover(el) {
-  if (!el.hasAttribute("popover"))
-    return false;
-  try {
-    if (el.matches(":popover-open"))
-      return true;
-  } catch {}
-  return isVisibleElement(el);
+    if (!el.hasAttribute('popover'))
+        return false;
+    try {
+        if (el.matches(':popover-open'))
+            return true;
+    }
+    catch {
+        // Some WebViews do not support :popover-open yet.
+    }
+    return isVisibleElement(el);
 }
 function isPotentialBlockingUi(el) {
-  const rect = el.getBoundingClientRect();
-  const style = window.getComputedStyle(el);
-  const role = (el.getAttribute("role") || "").toLowerCase();
-  const nameHint = safeNameHint(el);
-  const position = style.position;
-  const zIndex = Number.parseInt(style.zIndex, 10);
-  const floating = position === "fixed" || position === "absolute" || position === "sticky";
-  const hasUsefulZIndex = Number.isFinite(zIndex) && zIndex >= zIndexThreshold();
-  const hasOverlayName = /modal|dialog|drawer|sheet|sidebar|side-bar|popover|popper|dropdown|menu|select|portal|floating|tooltip|overlay|command|cmdk|palette|toast/i.test(nameHint);
-  const hasOverlayRole = /dialog|menu|listbox|tooltip|tree|grid/.test(role);
-  const isLargePanel = rect.width > viewportWidth() * 0.45 && rect.height > viewportHeight() * 0.28;
-  const isBottomUi = rect.bottom > viewportHeight() * 0.55 && rect.width > viewportWidth() * 0.35 && rect.height > 44;
-  return el.getAttribute("aria-modal") === "true" || hasOpenPopover(el) || hasOverlayName && (floating || hasUsefulZIndex || isLargePanel || isBottomUi) || hasOverlayRole && (floating || hasUsefulZIndex || isBottomUi);
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    const nameHint = safeNameHint(el);
+    const position = style.position;
+    const zIndex = Number.parseInt(style.zIndex, 10);
+    const floating = position === 'fixed' || position === 'absolute' || position === 'sticky';
+    const hasUsefulZIndex = Number.isFinite(zIndex) && zIndex >= zIndexThreshold();
+    const hasOverlayName = /modal|dialog|drawer|sheet|sidebar|side-bar|popover|popper|dropdown|menu|select|portal|floating|tooltip|overlay|command|cmdk|palette|toast/i.test(nameHint);
+    const hasOverlayRole = /dialog|menu|listbox|tooltip|tree|grid/.test(role);
+    const isLargePanel = rect.width > viewportWidth() * 0.45 && rect.height > viewportHeight() * 0.28;
+    const isBottomUi = rect.bottom > viewportHeight() * 0.55 && rect.width > viewportWidth() * 0.35 && rect.height > 44;
+    return (el.getAttribute('aria-modal') === 'true' ||
+        hasOpenPopover(el) ||
+        (hasOverlayName && (floating || hasUsefulZIndex || isLargePanel || isBottomUi)) ||
+        (hasOverlayRole && (floating || hasUsefulZIndex || isBottomUi)));
 }
 function queryPotentialBlockingElements() {
-  const selectors = [
-    '[role="dialog"]',
-    '[role="menu"]',
-    '[role="listbox"]',
-    '[role="tooltip"]',
-    '[aria-modal="true"]',
-    "[popover]",
-    "[data-radix-popper-content-wrapper]",
-    "[data-radix-portal]",
-    "[data-floating-ui-portal]",
-    "[data-headlessui-portal]",
-    '[data-state="open"]',
-    '[class*="modal" i]',
-    '[class*="dialog" i]',
-    '[class*="drawer" i]',
-    '[class*="sheet" i]',
-    '[class*="sidebar" i]',
-    '[class*="side-bar" i]',
-    '[class*="popover" i]',
-    '[class*="popper" i]',
-    '[class*="dropdown" i]',
-    '[class*="menu" i]',
-    '[class*="portal" i]',
-    '[class*="overlay" i]'
-  ];
-  try {
-    return Array.from(document.querySelectorAll(selectors.join(","))).filter((el) => el instanceof HTMLElement);
-  } catch {
-    return [];
-  }
+    const selectors = [
+        '[role="dialog"]',
+        '[role="menu"]',
+        '[role="listbox"]',
+        '[role="tooltip"]',
+        '[aria-modal="true"]',
+        '[popover]',
+        '[data-radix-popper-content-wrapper]',
+        '[data-radix-portal]',
+        '[data-floating-ui-portal]',
+        '[data-headlessui-portal]',
+        '[data-state="open"]',
+        '[class*="modal" i]',
+        '[class*="dialog" i]',
+        '[class*="drawer" i]',
+        '[class*="sheet" i]',
+        '[class*="sidebar" i]',
+        '[class*="side-bar" i]',
+        '[class*="popover" i]',
+        '[class*="popper" i]',
+        '[class*="dropdown" i]',
+        '[class*="menu" i]',
+        '[class*="portal" i]',
+        '[class*="overlay" i]',
+    ];
+    try {
+        return Array.from(document.querySelectorAll(selectors.join(','))).filter((el) => el instanceof HTMLElement);
+    }
+    catch {
+        return [];
+    }
 }
 function isProbablyEdgePanel(el, side, ruler, inputAnchor) {
-  if (el === ruler || ruler.contains(el))
-    return false;
-  if (el === inputAnchor || inputAnchor.contains(el) || el.contains(inputAnchor))
-    return false;
-  if (el === document.body || el === document.documentElement)
-    return false;
-  if (!isVisibleElement(el))
-    return false;
-  const rect = el.getBoundingClientRect();
-  const style = window.getComputedStyle(el);
-  const nameHint = safeNameHint(el);
-  const role = (el.getAttribute("role") || "").toLowerCase();
-  const position = style.position;
-  const zIndex = Number.parseInt(style.zIndex, 10);
-  const vw = viewportWidth();
-  const vh = viewportHeight();
-  const touchesEdge = side === "right" ? rect.right >= vw - 4 : rect.left <= 4;
-  const substantialWidth = rect.width >= 42;
-  const substantialHeight = rect.height >= Math.min(160, vh * 0.22);
-  const floating = position === "fixed" || position === "absolute" || position === "sticky";
-  const highZ = Number.isFinite(zIndex) && zIndex >= zIndexThreshold();
-  const namedLikePanel = /sidebar|side-bar|dock|drawer|sheet|panel|rail|nav|navigation|settings|extension|profile|loom|weaver|connect|browser|chars|character|persona|lore|memory|data/i.test(nameHint);
-  const roleLikePanel = /dialog|navigation|complementary/.test(role);
-  const fullHeightRail = rect.height > vh * 0.64;
-  const nearOwnSide = side === "right" ? rect.left >= vw * 0.38 : rect.right <= vw * 0.62;
-  const nearlyFullscreen = rect.left <= 4 && rect.right >= vw - 4;
-  const tooWideForPanel = rect.width > Math.min(maxEdgePanelWidth(ruler), vw * 0.52);
-  const narrowRail = rect.width <= 124 && fullHeightRail;
-  const mediumPanel = rect.width > 124 && (floating || highZ || namedLikePanel || roleLikePanel);
-  if (nearlyFullscreen || tooWideForPanel || !nearOwnSide)
-    return false;
-  return touchesEdge && substantialWidth && substantialHeight && (narrowRail || mediumPanel);
+    if (el === ruler || ruler.contains(el))
+        return false;
+    if (el === inputAnchor || inputAnchor.contains(el) || el.contains(inputAnchor))
+        return false;
+    if (el === document.body || el === document.documentElement)
+        return false;
+    if (isSpindleExtensionOwned(el))
+        return false;
+    if (!isVisibleElement(el))
+        return false;
+    const rect = el.getBoundingClientRect();
+    const style = window.getComputedStyle(el);
+    const nameHint = safeNameHint(el);
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    const position = style.position;
+    const zIndex = Number.parseInt(style.zIndex, 10);
+    const vw = viewportWidth();
+    const vh = viewportHeight();
+    const touchesEdge = side === 'right' ? rect.right >= vw - 4 : rect.left <= 4;
+    const substantialWidth = rect.width >= 42;
+    const substantialHeight = rect.height >= Math.min(160, vh * 0.22);
+    const floating = position === 'fixed' || position === 'absolute' || position === 'sticky';
+    const highZ = Number.isFinite(zIndex) && zIndex >= zIndexThreshold();
+    const namedLikePanel = /sidebar|side-bar|dock|drawer|sheet|panel|rail|nav|navigation|settings|extension|profile|loom|weaver|connect|browser|chars|character|persona|lore|memory|data/i.test(nameHint);
+    const roleLikePanel = /dialog|navigation|complementary/.test(role);
+    const fullHeightRail = rect.height > vh * 0.64;
+    const nearOwnSide = side === 'right' ? rect.left >= vw * 0.38 : rect.right <= vw * 0.62;
+    const nearlyFullscreen = rect.left <= 4 && rect.right >= vw - 4;
+    const tooWideForPanel = rect.width > Math.min(maxEdgePanelWidth(ruler), vw * 0.52);
+    const narrowRail = rect.width <= 124 && fullHeightRail;
+    const mediumPanel = rect.width > 124 && (floating || highZ || namedLikePanel || roleLikePanel);
+    // Important: many Lumiverse app-shell/main-content wrappers touch the left edge and are
+    // full-height. Treating those as side panels squishes the ruler into the actual sidebar.
+    // Edge avoidance is only for narrow rails and plausible dock/drawer panels.
+    if (nearlyFullscreen || tooWideForPanel || !nearOwnSide)
+        return false;
+    return touchesEdge && substantialWidth && substantialHeight && (narrowRail || mediumPanel);
 }
 function edgePanelInsets(ruler, inputAnchor, bottomAnchor) {
-  if (isMobileViewport(ruler))
-    return { left: 0, right: 0 };
-  const height = Number.parseFloat(ruler.style.height) || ruler.getBoundingClientRect().height || readSavedHeight() || DEFAULT_HEIGHT;
-  const top = Math.max(0, viewportHeight() - bottomAnchor - height);
-  const bottom = Math.min(viewportHeight(), viewportHeight() - bottomAnchor);
-  const samples = [
-    top + 18,
-    top + Math.max(26, (bottom - top) * 0.42),
-    Math.max(top + 18, bottom - 18),
-    viewportHeight() * 0.5
-  ].filter((value) => Number.isFinite(value)).map((value) => Math.max(1, Math.min(viewportHeight() - 1, value)));
-  const gap = sidePanelGap(ruler);
-  let left = 0;
-  let right = 0;
-  for (const y of samples) {
-    for (const side of ["left", "right"]) {
-      const x = side === "right" ? viewportWidth() - 2 : 2;
-      const elements = document.elementsFromPoint(x, y);
-      for (const element of elements) {
-        if (!(element instanceof HTMLElement))
-          continue;
-        if (!isProbablyEdgePanel(element, side, ruler, inputAnchor))
-          continue;
-        const rect = element.getBoundingClientRect();
-        if (side === "right") {
-          right = Math.max(right, viewportWidth() - rect.left + gap);
-        } else {
-          left = Math.max(left, rect.right + gap);
+    if (isMobileViewport(ruler))
+        return { left: 0, right: 0 };
+    const height = Number.parseFloat(ruler.style.height) ||
+        ruler.getBoundingClientRect().height ||
+        readSavedHeight() ||
+        DEFAULT_HEIGHT;
+    const top = Math.max(0, viewportHeight() - bottomAnchor - height);
+    const bottom = Math.min(viewportHeight(), viewportHeight() - bottomAnchor);
+    const samples = [
+        top + 18,
+        top + Math.max(26, (bottom - top) * 0.42),
+        Math.max(top + 18, bottom - 18),
+        viewportHeight() * 0.5,
+    ]
+        .filter((value) => Number.isFinite(value))
+        .map((value) => Math.max(1, Math.min(viewportHeight() - 1, value)));
+    const gap = sidePanelGap(ruler);
+    let left = 0;
+    let right = 0;
+    for (const y of samples) {
+        for (const side of ['left', 'right']) {
+            const x = side === 'right' ? viewportWidth() - 2 : 2;
+            const elements = document.elementsFromPoint(x, y);
+            for (const element of elements) {
+                if (!(element instanceof HTMLElement))
+                    continue;
+                if (!isProbablyEdgePanel(element, side, ruler, inputAnchor))
+                    continue;
+                const rect = element.getBoundingClientRect();
+                if (side === 'right') {
+                    right = Math.max(right, viewportWidth() - rect.left + gap);
+                }
+                else {
+                    left = Math.max(left, rect.right + gap);
+                }
+            }
         }
-      }
     }
-  }
-  return { left, right };
+    return { left, right };
 }
 function horizontalInsets(ruler, inputAnchor, bottomAnchor) {
-  const rect = inputAnchor.getBoundingClientRect();
-  const baseInset = sideInset(ruler);
-  let left = baseInset;
-  let right = baseInset;
-  if (rect.width >= viewportWidth() * 0.38 && rect.height >= 28) {
-    left = Math.max(left, Math.floor(rect.left));
-    right = Math.max(right, Math.floor(viewportWidth() - rect.right));
-  }
-  const edgeInsets = edgePanelInsets(ruler, inputAnchor, bottomAnchor);
-  const maxPanelInset = maxEdgePanelWidth(ruler) + sidePanelGap(ruler);
-  left = Math.max(left, Math.min(edgeInsets.left, maxPanelInset));
-  right = Math.max(right, Math.min(edgeInsets.right, maxPanelInset));
-  const maxTotalInset = Math.max(0, viewportWidth() - minRulerWidth(ruler));
-  if (left + right > maxTotalInset) {
-    const overflow = left + right - maxTotalInset;
-    if (left > right)
-      left = Math.max(baseInset, left - overflow);
-    else
-      right = Math.max(baseInset, right - overflow);
-  }
-  return { left: Math.round(left), right: Math.round(right) };
+    const rect = inputAnchor.getBoundingClientRect();
+    const baseInset = sideInset(ruler);
+    let left = baseInset;
+    let right = baseInset;
+    if (rect.width >= viewportWidth() * 0.38 && rect.height >= 28) {
+        left = Math.max(left, Math.floor(rect.left));
+        right = Math.max(right, Math.floor(viewportWidth() - rect.right));
+    }
+    const edgeInsets = edgePanelInsets(ruler, inputAnchor, bottomAnchor);
+    const maxPanelInset = maxEdgePanelWidth(ruler) + sidePanelGap(ruler);
+    left = Math.max(left, Math.min(edgeInsets.left, maxPanelInset));
+    right = Math.max(right, Math.min(edgeInsets.right, maxPanelInset));
+    const maxTotalInset = Math.max(0, viewportWidth() - minRulerWidth(ruler));
+    if (left + right > maxTotalInset) {
+        const overflow = left + right - maxTotalInset;
+        if (left > right)
+            left = Math.max(baseInset, left - overflow);
+        else
+            right = Math.max(baseInset, right - overflow);
+    }
+    return { left: Math.round(left), right: Math.round(right) };
 }
 function shouldYieldToAppUi(ruler, inputAnchor) {
-  ruler.dataset.blocker = "";
-  if (isMobileViewport(ruler) && !mobileYieldUi(ruler))
+    ruler.dataset.blocker = '';
+    // Mobile Lumi/WebView chrome can expose ordinary app wrappers as "open"
+    // dialogs, portals, menus, or data-state panels. Earlier builds obeyed those
+    // too politely and hid forever with data-reason="blocked-ui". Default mobile
+    // behavior is now: show in chat. People who prefer the old experimental mobile
+    // yielding can opt back in with --lrr-mobile-yield-ui: 1.
+    if (isMobileViewport(ruler) && !mobileYieldUi(ruler))
+        return false;
+    const rulerRect = ruler.getBoundingClientRect();
+    const handleRect = ruler.querySelector('.reading-ruler-handle')?.getBoundingClientRect() || rulerRect;
+    const mobile = isMobileViewport(ruler);
+    for (const el of queryPotentialBlockingElements()) {
+        if (el === ruler || ruler.contains(el))
+            continue;
+        if (inputAnchor && (el === inputAnchor || el.contains(inputAnchor) || inputAnchor.contains(el)))
+            continue;
+        // Extension UI is peer UI, not Lumiverse chrome. Do not let another Spindle
+        // extension's sidebar/resize handle/popover suppress the reading ruler.
+        if (isSpindleExtensionOwned(el))
+            continue;
+        if (!isVisibleElement(el))
+            continue;
+        if (!isPotentialBlockingUi(el))
+            continue;
+        const rect = el.getBoundingClientRect();
+        const role = (el.getAttribute('role') || '').toLowerCase();
+        const nameHint = safeNameHint(el);
+        const intersectsRuler = rectsOverlap(rect, rulerRect, 10) || rectsOverlap(rect, handleRect, 16);
+        const bottomPopover = rect.bottom > viewportHeight() * 0.52 && rect.width > viewportWidth() * 0.35 && rect.height > 48;
+        if (mobile) {
+            // On mobile, the app shell/input chrome often looks like a full-screen overlay in
+            // computed CSS. Be conservative: only yield to obvious modals/sheets/popovers/menus.
+            const hardModal = el.getAttribute('aria-modal') === 'true' ||
+                role === 'dialog' ||
+                /modal|dialog|drawer|sheet/i.test(nameHint);
+            const popup = hasOpenPopover(el) ||
+                /menu|listbox|tooltip/.test(role) ||
+                /popover|popper|dropdown|menu|select|tooltip|floating|portal/i.test(nameHint);
+            if (hardModal && (intersectsRuler || rect.width > viewportWidth() * 0.62 || rect.height > viewportHeight() * 0.36)) {
+                ruler.dataset.blocker = nameHint || role || el.tagName.toLowerCase();
+                return true;
+            }
+            if (popup && (intersectsRuler || bottomPopover)) {
+                ruler.dataset.blocker = nameHint || role || el.tagName.toLowerCase();
+                return true;
+            }
+            continue;
+        }
+        const hugeOverlay = rect.width > viewportWidth() * 0.72 && rect.height > viewportHeight() * 0.45;
+        if (hugeOverlay || intersectsRuler || bottomPopover) {
+            ruler.dataset.blocker = nameHint || role || el.tagName.toLowerCase();
+            return true;
+        }
+    }
     return false;
-  const rulerRect = ruler.getBoundingClientRect();
-  const handleRect = ruler.querySelector(".reading-ruler-handle")?.getBoundingClientRect() || rulerRect;
-  const mobile = isMobileViewport(ruler);
-  for (const el of queryPotentialBlockingElements()) {
-    if (el === ruler || ruler.contains(el))
-      continue;
-    if (inputAnchor && (el === inputAnchor || el.contains(inputAnchor) || inputAnchor.contains(el)))
-      continue;
-    if (!isVisibleElement(el))
-      continue;
-    if (!isPotentialBlockingUi(el))
-      continue;
-    const rect = el.getBoundingClientRect();
-    const role = (el.getAttribute("role") || "").toLowerCase();
-    const nameHint = safeNameHint(el);
-    const intersectsRuler = rectsOverlap(rect, rulerRect, 10) || rectsOverlap(rect, handleRect, 16);
-    const bottomPopover = rect.bottom > viewportHeight() * 0.52 && rect.width > viewportWidth() * 0.35 && rect.height > 48;
-    if (mobile) {
-      const hardModal = el.getAttribute("aria-modal") === "true" || role === "dialog" || /modal|dialog|drawer|sheet/i.test(nameHint);
-      const popup = hasOpenPopover(el) || /menu|listbox|tooltip/.test(role) || /popover|popper|dropdown|menu|select|tooltip|floating|portal/i.test(nameHint);
-      if (hardModal && (intersectsRuler || rect.width > viewportWidth() * 0.62 || rect.height > viewportHeight() * 0.36)) {
-        ruler.dataset.blocker = nameHint || role || el.tagName.toLowerCase();
-        return true;
-      }
-      if (popup && (intersectsRuler || bottomPopover)) {
-        ruler.dataset.blocker = nameHint || role || el.tagName.toLowerCase();
-        return true;
-      }
-      continue;
-    }
-    const hugeOverlay = rect.width > viewportWidth() * 0.72 && rect.height > viewportHeight() * 0.45;
-    if (hugeOverlay || intersectsRuler || bottomPopover) {
-      ruler.dataset.blocker = nameHint || role || el.tagName.toLowerCase();
-      return true;
-    }
-  }
-  return false;
 }
-var INPUT_ACTION_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="2"/><path d="M7 12h10"/></svg>`;
-function setup(ctx) {
-  const win = window;
-  win[GLOBAL_CLEANUP_KEY]?.();
-  const initialAnchor = findInputAnchor();
-  const initialBottom = computeBottomAnchor(initialAnchor);
-  const initialHeight = clampHeight(readSavedHeight() ?? readCssNumber("--lrr-default-height", DEFAULT_HEIGHT), initialBottom);
-  const removeStyle = ctx.dom.addStyle(`
+const INPUT_ACTION_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="8" rx="2"/><path d="M7 12h10"/></svg>`;
+export function setup(ctx) {
+    const win = window;
+    win[GLOBAL_CLEANUP_KEY]?.();
+    const initialAnchor = findInputAnchor();
+    const initialBottom = computeBottomAnchor(initialAnchor);
+    const initialHeight = clampHeight(readSavedHeight() ?? readCssNumber('--lrr-default-height', DEFAULT_HEIGHT), initialBottom);
+    const removeStyle = ctx.dom.addStyle(`
     #${ROOT_ID} {
       position: fixed;
       left: var(--lrr-runtime-left, var(--lrr-side-inset, 10px));
@@ -472,8 +558,8 @@ function setup(ctx) {
       position: absolute;
       left: 0;
       right: 0;
-      top: calc(var(--lrr-handle-hit-top, -32px));
-      height: var(--lrr-handle-hit-height, 58px);
+      top: var(--lrr-handle-hit-top, 0px);
+      height: var(--lrr-handle-hit-height, 28px);
       border: 0;
       margin: 0;
       padding: 0;
@@ -488,7 +574,7 @@ function setup(ctx) {
       content: '';
       position: absolute;
       left: 50%;
-      top: var(--lrr-handle-top, 17px);
+      top: var(--lrr-handle-top, 6px);
       width: min(var(--lrr-handle-width, 172px), 38vw);
       height: var(--lrr-handle-height, 8px);
       transform: translateX(-50%);
@@ -509,307 +595,340 @@ function setup(ctx) {
 
 
   `);
-  const wrapper = ctx.dom.inject("body", `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler; double-tap to collapse"></button></div>`, "beforeend");
-  const ruler = document.getElementById(ROOT_ID);
-  const handle = ruler?.querySelector(".reading-ruler-handle");
-  if (!ruler || !handle) {
-    removeStyle();
-    ctx.dom.uninject(wrapper);
-    return () => {
-      return;
+    const wrapper = ctx.dom.inject('body', `<div id="${ROOT_ID}" aria-label="Expandable reading ruler"><button class="reading-ruler-handle" type="button" aria-label="Drag to resize reading ruler; double-tap to collapse"></button></div>`, 'beforeend');
+    const ruler = document.getElementById(ROOT_ID);
+    const handle = ruler?.querySelector('.reading-ruler-handle');
+    if (!ruler || !handle) {
+        removeStyle();
+        ctx.dom.uninject(wrapper);
+        return () => undefined;
+    }
+    let dragging = false;
+    let activePointerId = null;
+    let startY = 0;
+    let startHeight = 0;
+    let tapPointerId = null;
+    let tapStartY = 0;
+    let tapMoved = false;
+    let lastTapAt = 0;
+    let lastBottomAnchor = initialBottom;
+    let syncFrame = 0;
+    let enabled = readEnabled();
+    let drawerOpen = false;
+    let settingsOpen = false;
+    let inputAction = null;
+    let unbindInputAction = null;
+    let unbindDrawer = null;
+    let unbindSettings = null;
+    const ensureWrapperMount = () => {
+        // Keep the ruler in Lumi's chat stacking context while chat exists. Current
+        // Lumi applies UI zoom to each direct body child, which makes a body-level
+        // Spindle injection a separate paint/stacking branch from #root. In that
+        // arrangement ScrollToBottom's z-index:32 cannot reliably interleave above
+        // this ruler's z-index:24. chat_surface_side is the host-provided extension
+        // mount inside ChatView, so native chat controls and the ruler can obey their
+        // intended z-index ordering again.
+        const desiredParent = findChatSurfaceMount() ?? document.body;
+        if (!wrapper.isConnected || wrapper.parentElement !== desiredParent) {
+            desiredParent.appendChild(wrapper);
+        }
     };
-  }
-  let dragging = false;
-  let activePointerId = null;
-  let startY = 0;
-  let startHeight = 0;
-  let tapPointerId = null;
-  let tapStartY = 0;
-  let tapMoved = false;
-  let lastTapAt = 0;
-  let lastBottomAnchor = initialBottom;
-  let syncFrame = 0;
-  let enabled = readEnabled();
-  let drawerOpen = false;
-  let settingsOpen = false;
-  let inputAction = null;
-  let unbindInputAction = null;
-  let unbindDrawer = null;
-  let unbindSettings = null;
-  const actionLabel = () => enabled ? "Hide Ruler" : "Show Ruler";
-  const updateInputAction = () => {
+    const actionLabel = () => (enabled ? 'Hide Ruler' : 'Show Ruler');
+    const updateInputAction = () => {
+        try {
+            inputAction?.setLabel?.(actionLabel());
+            inputAction?.setEnabled?.(true);
+        }
+        catch {
+            // Ignore stale action handles during hot-reload/extension teardown.
+        }
+    };
+    const setEnabled = (next, persist = true) => {
+        enabled = next;
+        if (persist)
+            saveEnabled(next);
+        updateInputAction();
+        scheduleSync();
+    };
+    const applyHeight = (nextHeight, persist = true) => {
+        const clamped = clampHeight(nextHeight, lastBottomAnchor, ruler);
+        ruler.style.height = `${clamped}px`;
+        if (persist)
+            saveHeight(clamped);
+    };
+    const applyHorizontalInsets = (inputAnchor) => {
+        const insets = horizontalInsets(ruler, inputAnchor, lastBottomAnchor);
+        ruler.style.setProperty('--lrr-runtime-left', `${insets.left}px`);
+        ruler.style.setProperty('--lrr-runtime-right', `${insets.right}px`);
+    };
+    const applyBottomAnchor = (nextBottom, inputAnchor) => {
+        lastBottomAnchor = nextBottom;
+        ruler.style.bottom = `${nextBottom}px`;
+        if (inputAnchor)
+            applyHorizontalInsets(inputAnchor);
+        const currentHeight = Number.parseFloat(window.getComputedStyle(ruler).height);
+        applyHeight(Number.isFinite(currentHeight) ? currentHeight : initialHeight, false);
+    };
+    const syncVisibility = () => {
+        ensureWrapperMount();
+        const inputAnchor = findInputAnchor();
+        const mobile = isMobileViewport(ruler);
+        const activeChat = isChatRoute() || (inputAnchor !== null && looksLikeMobileChatScreen());
+        if (!activeChat) {
+            ruler.dataset.active = 'false';
+            ruler.dataset.reason = 'no-chat';
+            return;
+        }
+        if (!enabled) {
+            ruler.dataset.active = 'false';
+            ruler.dataset.reason = 'disabled';
+            return;
+        }
+        if (!dragging && (drawerOpen || settingsOpen)) {
+            ruler.dataset.active = 'false';
+            ruler.dataset.reason = drawerOpen ? 'drawer-open' : 'settings-open';
+            return;
+        }
+        if (!dragging) {
+            applyBottomAnchor(computeBottomAnchor(inputAnchor), inputAnchor);
+            const saved = readSavedHeight();
+            if (saved !== null)
+                applyHeight(saved, false);
+        }
+        if (inputAnchor) {
+            applyHorizontalInsets(inputAnchor);
+        }
+        else if (mobile) {
+            ruler.style.setProperty('--lrr-runtime-left', 'var(--lrr-side-inset, 10px)');
+            ruler.style.setProperty('--lrr-runtime-right', 'var(--lrr-side-inset, 10px)');
+        }
+        const blockedByUi = !dragging && shouldYieldToAppUi(ruler, inputAnchor);
+        ruler.dataset.reason = blockedByUi ? 'blocked-ui' : 'active';
+        ruler.dataset.active = blockedByUi ? 'false' : 'true';
+    };
+    const scheduleSync = () => {
+        cancelAnimationFrame(syncFrame);
+        syncFrame = requestAnimationFrame(syncVisibility);
+    };
+    const beginDrag = (event) => {
+        const clientY = getClientY(event);
+        if (clientY === null)
+            return;
+        dragging = true;
+        ruler.dataset.dragging = 'true';
+        startY = clientY;
+        startHeight = ruler.getBoundingClientRect().height || initialHeight;
+        if ('pointerId' in event) {
+            activePointerId = event.pointerId;
+            try {
+                handle.setPointerCapture(event.pointerId);
+            }
+            catch {
+                // Window listeners below still handle drag in cranky mobile webviews.
+            }
+        }
+        event.preventDefault();
+    };
+    const continueDrag = (event) => {
+        if (!dragging)
+            return;
+        if ('pointerId' in event && activePointerId !== null && event.pointerId !== activePointerId)
+            return;
+        const clientY = getClientY(event);
+        if (clientY === null)
+            return;
+        const delta = startY - clientY;
+        applyHeight(startHeight + delta);
+        event.preventDefault();
+    };
+    const endDrag = (event) => {
+        if ('pointerId' in (event || {}) && activePointerId !== null && event.pointerId !== activePointerId)
+            return;
+        if (event && 'pointerId' in event) {
+            try {
+                if (handle.hasPointerCapture(event.pointerId))
+                    handle.releasePointerCapture(event.pointerId);
+            }
+            catch {
+                // Ignore pointer-capture cleanup failures.
+            }
+        }
+        dragging = false;
+        activePointerId = null;
+        ruler.dataset.dragging = 'false';
+        scheduleSync();
+    };
+    const collapseToMinimum = () => {
+        lastTapAt = 0;
+        applyHeight(minHeight(ruler));
+        scheduleSync();
+    };
+    const registerCleanTap = () => {
+        const now = Date.now();
+        if (lastTapAt > 0 && now - lastTapAt <= DOUBLE_TAP_WINDOW_MS) {
+            collapseToMinimum();
+            return;
+        }
+        lastTapAt = now;
+    };
+    const onTapPointerDown = (event) => {
+        if (event.isPrimary === false)
+            return;
+        tapPointerId = event.pointerId;
+        tapStartY = event.clientY;
+        tapMoved = false;
+    };
+    const onTapPointerMove = (event) => {
+        if (tapPointerId === null || event.pointerId !== tapPointerId)
+            return;
+        if (Math.abs(event.clientY - tapStartY) > TAP_MOVE_TOLERANCE)
+            tapMoved = true;
+    };
+    const onTapPointerUp = (event) => {
+        if (tapPointerId === null || event.pointerId !== tapPointerId)
+            return;
+        const moved = tapMoved || Math.abs(event.clientY - tapStartY) > TAP_MOVE_TOLERANCE;
+        tapPointerId = null;
+        tapMoved = false;
+        if (moved) {
+            lastTapAt = 0;
+            return;
+        }
+        registerCleanTap();
+    };
+    const onTapPointerCancel = (event) => {
+        if (tapPointerId !== null && event.pointerId !== tapPointerId)
+            return;
+        tapPointerId = null;
+        tapMoved = false;
+        lastTapAt = 0;
+    };
+    const onHandleDoubleClick = (event) => {
+        event.preventDefault();
+        collapseToMinimum();
+    };
+    const onResize = () => {
+        const inputAnchor = findInputAnchor();
+        applyBottomAnchor(computeBottomAnchor(inputAnchor), inputAnchor);
+        const saved = readSavedHeight();
+        applyHeight(saved ?? readCssNumber('--lrr-default-height', DEFAULT_HEIGHT, ruler), false);
+        scheduleSync();
+    };
     try {
-      inputAction?.setLabel?.(actionLabel());
-      inputAction?.setEnabled?.(true);
-    } catch {}
-  };
-  const setEnabled = (next, persist = true) => {
-    enabled = next;
-    if (persist)
-      saveEnabled(next);
-    updateInputAction();
-    scheduleSync();
-  };
-  const applyHeight = (nextHeight, persist = true) => {
-    const clamped = clampHeight(nextHeight, lastBottomAnchor, ruler);
-    ruler.style.height = `${clamped}px`;
-    if (persist)
-      saveHeight(clamped);
-  };
-  const applyHorizontalInsets = (inputAnchor) => {
-    const insets = horizontalInsets(ruler, inputAnchor, lastBottomAnchor);
-    ruler.style.setProperty("--lrr-runtime-left", `${insets.left}px`);
-    ruler.style.setProperty("--lrr-runtime-right", `${insets.right}px`);
-  };
-  const applyBottomAnchor = (nextBottom, inputAnchor) => {
-    lastBottomAnchor = nextBottom;
-    ruler.style.bottom = `${nextBottom}px`;
-    if (inputAnchor)
-      applyHorizontalInsets(inputAnchor);
-    const currentHeight = Number.parseFloat(window.getComputedStyle(ruler).height);
-    applyHeight(Number.isFinite(currentHeight) ? currentHeight : initialHeight, false);
-  };
-  const syncVisibility = () => {
-    const inputAnchor = findInputAnchor();
-    const mobile = isMobileViewport(ruler);
-    const activeChat = isChatRoute() || inputAnchor !== null && looksLikeMobileChatScreen();
-    if (!activeChat) {
-      ruler.dataset.active = "false";
-      ruler.dataset.reason = "no-chat";
-      return;
+        const registerInputBarAction = ctx.ui?.registerInputBarAction;
+        if (typeof registerInputBarAction === 'function') {
+            inputAction = registerInputBarAction.call(ctx.ui, {
+                id: 'toggle-reading-ruler',
+                label: actionLabel(),
+                iconSvg: INPUT_ACTION_ICON,
+                enabled: true,
+            });
+            unbindInputAction = inputAction?.onClick?.(() => {
+                setEnabled(!enabled);
+            }) ?? null;
+        }
     }
-    if (!enabled) {
-      ruler.dataset.active = "false";
-      ruler.dataset.reason = "disabled";
-      return;
+    catch {
+        // Older host builds may not expose Input Bar Actions. The ruler still works;
+        // it just cannot add the native composer action.
     }
-    if (!dragging && (drawerOpen || settingsOpen)) {
-      ruler.dataset.active = "false";
-      ruler.dataset.reason = drawerOpen ? "drawer-open" : "settings-open";
-      return;
+    try {
+        const uiEvents = ctx.ui?.events;
+        if (typeof uiEvents?.onDrawerChange === 'function') {
+            unbindDrawer = uiEvents.onDrawerChange((state) => {
+                drawerOpen = Boolean(state?.open);
+                scheduleSync();
+            });
+        }
+        if (typeof uiEvents?.onSettingsChange === 'function') {
+            unbindSettings = uiEvents.onSettingsChange((state) => {
+                settingsOpen = Boolean(state?.open);
+                scheduleSync();
+            });
+        }
     }
-    if (!dragging) {
-      applyBottomAnchor(computeBottomAnchor(inputAnchor), inputAnchor);
-      const saved = readSavedHeight();
-      if (saved !== null)
-        applyHeight(saved, false);
+    catch {
+        // UI state helpers are best-effort; DOM yielding still handles ordinary popovers.
     }
-    if (inputAnchor) {
-      applyHorizontalInsets(inputAnchor);
-    } else if (mobile) {
-      ruler.style.setProperty("--lrr-runtime-left", "var(--lrr-side-inset, 10px)");
-      ruler.style.setProperty("--lrr-runtime-right", "var(--lrr-side-inset, 10px)");
-    }
-    const blockedByUi = !dragging && shouldYieldToAppUi(ruler, inputAnchor);
-    ruler.dataset.reason = blockedByUi ? "blocked-ui" : "active";
-    ruler.dataset.active = blockedByUi ? "false" : "true";
-  };
-  const scheduleSync = () => {
-    cancelAnimationFrame(syncFrame);
-    syncFrame = requestAnimationFrame(syncVisibility);
-  };
-  const beginDrag = (event) => {
-    const clientY = getClientY(event);
-    if (clientY === null)
-      return;
-    dragging = true;
-    ruler.dataset.dragging = "true";
-    startY = clientY;
-    startHeight = ruler.getBoundingClientRect().height || initialHeight;
-    if ("pointerId" in event) {
-      activePointerId = event.pointerId;
-      try {
-        handle.setPointerCapture(event.pointerId);
-      } catch {}
-    }
-    event.preventDefault();
-  };
-  const continueDrag = (event) => {
-    if (!dragging)
-      return;
-    if ("pointerId" in event && activePointerId !== null && event.pointerId !== activePointerId)
-      return;
-    const clientY = getClientY(event);
-    if (clientY === null)
-      return;
-    const delta = startY - clientY;
-    applyHeight(startHeight + delta);
-    event.preventDefault();
-  };
-  const endDrag = (event) => {
-    if ("pointerId" in (event || {}) && activePointerId !== null && event.pointerId !== activePointerId)
-      return;
-    if (event && "pointerId" in event) {
-      try {
-        if (handle.hasPointerCapture(event.pointerId))
-          handle.releasePointerCapture(event.pointerId);
-      } catch {}
-    }
-    dragging = false;
-    activePointerId = null;
-    ruler.dataset.dragging = "false";
-    scheduleSync();
-  };
-  const collapseToMinimum = () => {
-    lastTapAt = 0;
-    applyHeight(minHeight(ruler));
-    scheduleSync();
-  };
-  const registerCleanTap = () => {
-    const now = Date.now();
-    if (lastTapAt > 0 && now - lastTapAt <= DOUBLE_TAP_WINDOW_MS) {
-      collapseToMinimum();
-      return;
-    }
-    lastTapAt = now;
-  };
-  const onTapPointerDown = (event) => {
-    if (event.isPrimary === false)
-      return;
-    tapPointerId = event.pointerId;
-    tapStartY = event.clientY;
-    tapMoved = false;
-  };
-  const onTapPointerMove = (event) => {
-    if (tapPointerId === null || event.pointerId !== tapPointerId)
-      return;
-    if (Math.abs(event.clientY - tapStartY) > TAP_MOVE_TOLERANCE)
-      tapMoved = true;
-  };
-  const onTapPointerUp = (event) => {
-    if (tapPointerId === null || event.pointerId !== tapPointerId)
-      return;
-    const moved = tapMoved || Math.abs(event.clientY - tapStartY) > TAP_MOVE_TOLERANCE;
-    tapPointerId = null;
-    tapMoved = false;
-    if (moved) {
-      lastTapAt = 0;
-      return;
-    }
-    registerCleanTap();
-  };
-  const onTapPointerCancel = (event) => {
-    if (tapPointerId !== null && event.pointerId !== tapPointerId)
-      return;
-    tapPointerId = null;
-    tapMoved = false;
-    lastTapAt = 0;
-  };
-  const onHandleDoubleClick = (event) => {
-    event.preventDefault();
-    collapseToMinimum();
-  };
-  const onResize = () => {
-    const inputAnchor = findInputAnchor();
-    applyBottomAnchor(computeBottomAnchor(inputAnchor), inputAnchor);
-    const saved = readSavedHeight();
-    applyHeight(saved ?? readCssNumber("--lrr-default-height", DEFAULT_HEIGHT, ruler), false);
-    scheduleSync();
-  };
-  try {
-    const registerInputBarAction = ctx.ui?.registerInputBarAction;
-    if (typeof registerInputBarAction === "function") {
-      inputAction = registerInputBarAction.call(ctx.ui, {
-        id: "toggle-reading-ruler",
-        label: actionLabel(),
-        iconSvg: INPUT_ACTION_ICON,
-        enabled: true
-      });
-      unbindInputAction = inputAction?.onClick?.(() => {
-        setEnabled(!enabled);
-      }) ?? null;
-    }
-  } catch {}
-  try {
-    const uiEvents = ctx.ui?.events;
-    if (typeof uiEvents?.onDrawerChange === "function") {
-      unbindDrawer = uiEvents.onDrawerChange((state) => {
-        drawerOpen = Boolean(state?.open);
-        scheduleSync();
-      });
-    }
-    if (typeof uiEvents?.onSettingsChange === "function") {
-      unbindSettings = uiEvents.onSettingsChange((state) => {
-        settingsOpen = Boolean(state?.open);
-        scheduleSync();
-      });
-    }
-  } catch {}
-  const observer = new MutationObserver(scheduleSync);
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["class", "style", "data-state", "aria-hidden", "aria-modal", "popover"]
-  });
-  const supportsPointer = "PointerEvent" in window;
-  if (supportsPointer) {
-    handle.addEventListener("pointerdown", beginDrag, { passive: false });
-    window.addEventListener("pointermove", continueDrag, { passive: false });
-    window.addEventListener("pointerup", endDrag, { passive: false });
-    window.addEventListener("pointercancel", endDrag, { passive: false });
-    handle.addEventListener("pointerdown", onTapPointerDown, { passive: true });
-    window.addEventListener("pointermove", onTapPointerMove, { passive: true });
-    window.addEventListener("pointerup", onTapPointerUp, { passive: true });
-    window.addEventListener("pointercancel", onTapPointerCancel, { passive: true });
-  } else {
-    handle.addEventListener("mousedown", beginDrag, { passive: false });
-    window.addEventListener("mousemove", continueDrag, { passive: false });
-    window.addEventListener("mouseup", endDrag, { passive: false });
-    handle.addEventListener("touchstart", beginDrag, { passive: false });
-    window.addEventListener("touchmove", continueDrag, { passive: false });
-    window.addEventListener("touchend", endDrag, { passive: false });
-    window.addEventListener("touchcancel", endDrag, { passive: false });
-  }
-  handle.addEventListener("dblclick", onHandleDoubleClick, { passive: false });
-  window.addEventListener("resize", onResize);
-  window.addEventListener("orientationchange", onResize);
-  window.addEventListener("popstate", scheduleSync);
-  window.addEventListener("hashchange", scheduleSync);
-  const interval = window.setInterval(syncVisibility, 500);
-  syncVisibility();
-  const cleanup = () => {
-    cancelAnimationFrame(syncFrame);
-    window.clearInterval(interval);
-    observer.disconnect();
+    const observer = new MutationObserver(scheduleSync);
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['class', 'style', 'data-state', 'aria-hidden', 'aria-modal', 'popover'],
+    });
+    const supportsPointer = 'PointerEvent' in window;
     if (supportsPointer) {
-      handle.removeEventListener("pointerdown", beginDrag);
-      window.removeEventListener("pointermove", continueDrag);
-      window.removeEventListener("pointerup", endDrag);
-      window.removeEventListener("pointercancel", endDrag);
-      handle.removeEventListener("pointerdown", onTapPointerDown);
-      window.removeEventListener("pointermove", onTapPointerMove);
-      window.removeEventListener("pointerup", onTapPointerUp);
-      window.removeEventListener("pointercancel", onTapPointerCancel);
-    } else {
-      handle.removeEventListener("mousedown", beginDrag);
-      window.removeEventListener("mousemove", continueDrag);
-      window.removeEventListener("mouseup", endDrag);
-      handle.removeEventListener("touchstart", beginDrag);
-      window.removeEventListener("touchmove", continueDrag);
-      window.removeEventListener("touchend", endDrag);
-      window.removeEventListener("touchcancel", endDrag);
+        handle.addEventListener('pointerdown', beginDrag, { passive: false });
+        window.addEventListener('pointermove', continueDrag, { passive: false });
+        window.addEventListener('pointerup', endDrag, { passive: false });
+        window.addEventListener('pointercancel', endDrag, { passive: false });
+        // Observe taps independently from the resize lifecycle. Keeping these listeners
+        // separate means the original drag/mount/visibility path remains untouched.
+        handle.addEventListener('pointerdown', onTapPointerDown, { passive: true });
+        window.addEventListener('pointermove', onTapPointerMove, { passive: true });
+        window.addEventListener('pointerup', onTapPointerUp, { passive: true });
+        window.addEventListener('pointercancel', onTapPointerCancel, { passive: true });
     }
-    handle.removeEventListener("dblclick", onHandleDoubleClick);
-    window.removeEventListener("resize", onResize);
-    window.removeEventListener("orientationchange", onResize);
-    window.removeEventListener("popstate", scheduleSync);
-    window.removeEventListener("hashchange", scheduleSync);
-    try {
-      unbindInputAction?.();
-      inputAction?.destroy?.();
-      unbindDrawer?.();
-      unbindSettings?.();
-    } catch {}
-    removeStyle();
-    ctx.dom.uninject(wrapper);
-    ctx.dom.cleanup();
-    if (win[GLOBAL_CLEANUP_KEY] === cleanup)
-      delete win[GLOBAL_CLEANUP_KEY];
-  };
-  win[GLOBAL_CLEANUP_KEY] = cleanup;
-  return cleanup;
+    else {
+        handle.addEventListener('mousedown', beginDrag, { passive: false });
+        window.addEventListener('mousemove', continueDrag, { passive: false });
+        window.addEventListener('mouseup', endDrag, { passive: false });
+        handle.addEventListener('touchstart', beginDrag, { passive: false });
+        window.addEventListener('touchmove', continueDrag, { passive: false });
+        window.addEventListener('touchend', endDrag, { passive: false });
+        window.addEventListener('touchcancel', endDrag, { passive: false });
+    }
+    handle.addEventListener('dblclick', onHandleDoubleClick, { passive: false });
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    window.addEventListener('popstate', scheduleSync);
+    window.addEventListener('hashchange', scheduleSync);
+    const interval = window.setInterval(syncVisibility, 500);
+    syncVisibility();
+    const cleanup = () => {
+        cancelAnimationFrame(syncFrame);
+        window.clearInterval(interval);
+        observer.disconnect();
+        if (supportsPointer) {
+            handle.removeEventListener('pointerdown', beginDrag);
+            window.removeEventListener('pointermove', continueDrag);
+            window.removeEventListener('pointerup', endDrag);
+            window.removeEventListener('pointercancel', endDrag);
+            handle.removeEventListener('pointerdown', onTapPointerDown);
+            window.removeEventListener('pointermove', onTapPointerMove);
+            window.removeEventListener('pointerup', onTapPointerUp);
+            window.removeEventListener('pointercancel', onTapPointerCancel);
+        }
+        else {
+            handle.removeEventListener('mousedown', beginDrag);
+            window.removeEventListener('mousemove', continueDrag);
+            window.removeEventListener('mouseup', endDrag);
+            handle.removeEventListener('touchstart', beginDrag);
+            window.removeEventListener('touchmove', continueDrag);
+            window.removeEventListener('touchend', endDrag);
+            window.removeEventListener('touchcancel', endDrag);
+        }
+        handle.removeEventListener('dblclick', onHandleDoubleClick);
+        window.removeEventListener('resize', onResize);
+        window.removeEventListener('orientationchange', onResize);
+        window.removeEventListener('popstate', scheduleSync);
+        window.removeEventListener('hashchange', scheduleSync);
+        try {
+            unbindInputAction?.();
+            inputAction?.destroy?.();
+            unbindDrawer?.();
+            unbindSettings?.();
+        }
+        catch {
+            // Ignore cleanup races on hot reload.
+        }
+        removeStyle();
+        ctx.dom.uninject(wrapper);
+        ctx.dom.cleanup();
+        if (win[GLOBAL_CLEANUP_KEY] === cleanup)
+            delete win[GLOBAL_CLEANUP_KEY];
+    };
+    win[GLOBAL_CLEANUP_KEY] = cleanup;
+    return cleanup;
 }
-export {
-  setup
-};

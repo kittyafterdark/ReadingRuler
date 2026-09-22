@@ -77,9 +77,9 @@ Handle variables:
 
 ```css
 :root {
-  --lrr-handle-hit-top: -32px;
-  --lrr-handle-hit-height: 58px;
-  --lrr-handle-top: 17px;
+  --lrr-handle-hit-top: 0px;
+  --lrr-handle-hit-height: 28px;
+  --lrr-handle-top: 6px;
   --lrr-handle-width: 172px;
   --lrr-handle-height: 8px;
   --lrr-handle-radius: 999px;
@@ -170,3 +170,12 @@ Lumiverse staging keeps `ViewportDrawer` mounted while closed and moves the draw
 Version 1.1.5 makes visibility checks two-dimensional: elements wholly left or right of the viewport are ignored. An open drawer still yields normally; a closed transformed drawer no longer suppresses the ruler.
 
 The ruler keeps its default z-index of `24`; Lumiverse's native scroll-to-bottom control remains above it.
+
+## 1.1.6 Lumi staging integration note
+
+Version 1.1.6 keeps peer Spindle extension UI out of Reading Ruler's blocker scan, so controls such as another extension's sidebar resize handle cannot force the ruler into `data-reason="blocked-ui"`. Native Lumiverse drawers, dialogs, and other host chrome still yield normally.
+
+While a chat is mounted, the ruler's tracked Spindle injection wrapper is reparented into Lumiverse's `chat_surface_side` mount. This keeps the ruler and native chat controls in the same chat stacking branch, allowing the native `ScrollToBottom` button at z-index `32` to paint above the ruler at z-index `24`.
+
+The drag handle is also docked entirely inside the ruler's top edge by default. Its hit target no longer floats above the curtain over readable text. Double-tap/double-click collapse behavior is unchanged.
+

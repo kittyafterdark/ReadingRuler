@@ -137,6 +137,22 @@ function isVisibleElement(el: Element): el is HTMLElement {
   )
 }
 
+const SPINDLE_EXTENSION_OWNER_SELECTOR =
+  '[data-spindle-ext], [data-spindle-extension-root], [data-spindle-extension-id], [data-spindle-ext-id]'
+
+function isSpindleExtensionOwned(el: Element): boolean {
+  try {
+    return Boolean(el.closest(SPINDLE_EXTENSION_OWNER_SELECTOR))
+  } catch {
+    return false
+  }
+}
+
+function findChatSurfaceMount(): HTMLElement | null {
+  const mount = document.querySelector('[data-spindle-mount="chat_surface_side"]')
+  return mount instanceof HTMLElement ? mount : null
+}
+
 function routeText(): string {
   // Do not include window.location.href here. The production domain is
   // lumiverse.chat, so a naive /chat/ test on href makes every screen look
@@ -375,6 +391,7 @@ function isProbablyEdgePanel(
   if (el === ruler || ruler.contains(el)) return false
   if (el === inputAnchor || inputAnchor.contains(el) || el.contains(inputAnchor)) return false
   if (el === document.body || el === document.documentElement) return false
+  if (isSpindleExtensionOwned(el)) return false
   if (!isVisibleElement(el)) return false
 
   const rect = el.getBoundingClientRect()
@@ -507,6 +524,9 @@ function shouldYieldToAppUi(ruler: HTMLElement, inputAnchor: HTMLElement | null)
   for (const el of queryPotentialBlockingElements()) {
     if (el === ruler || ruler.contains(el)) continue
     if (inputAnchor && (el === inputAnchor || el.contains(inputAnchor) || inputAnchor.contains(el))) continue
+    // Extension UI is peer UI, not Lumiverse chrome. Do not let another Spindle
+    // extension's sidebar/resize handle/popover suppress the reading ruler.
+    if (isSpindleExtensionOwned(el)) continue
     if (!isVisibleElement(el)) continue
     if (!isPotentialBlockingUi(el)) continue
 
@@ -641,8 +661,8 @@ export function setup(ctx: SpindleFrontendContext) {
       position: absolute;
       left: 0;
       right: 0;
-      top: calc(var(--lrr-handle-hit-top, -32px));
-      height: var(--lrr-handle-hit-height, 58px);
+      top: var(--lrr-handle-hit-top, 0px);
+      height: var(--lrr-handle-hit-height, 28px);
       border: 0;
       margin: 0;
       padding: 0;
@@ -657,7 +677,7 @@ export function setup(ctx: SpindleFrontendContext) {
       content: '';
       position: absolute;
       left: 50%;
-      top: var(--lrr-handle-top, 17px);
+      top: var(--lrr-handle-top, 6px);
       width: min(var(--lrr-handle-width, 172px), 38vw);
       height: var(--lrr-handle-height, 8px);
       transform: translateX(-50%);
@@ -712,6 +732,20 @@ export function setup(ctx: SpindleFrontendContext) {
   let unbindDrawer: (() => void) | null = null
   let unbindSettings: (() => void) | null = null
 
+  const ensureWrapperMount = () => {
+    // Keep the ruler in Lumi's chat stacking context while chat exists. Current
+    // Lumi applies UI zoom to each direct body child, which makes a body-level
+    // Spindle injection a separate paint/stacking branch from #root. In that
+    // arrangement ScrollToBottom's z-index:32 cannot reliably interleave above
+    // this ruler's z-index:24. chat_surface_side is the host-provided extension
+    // mount inside ChatView, so native chat controls and the ruler can obey their
+    // intended z-index ordering again.
+    const desiredParent = findChatSurfaceMount() ?? document.body
+    if (!wrapper.isConnected || wrapper.parentElement !== desiredParent) {
+      desiredParent.appendChild(wrapper)
+    }
+  }
+
   const actionLabel = () => (enabled ? 'Hide Ruler' : 'Show Ruler')
 
   const updateInputAction = () => {
@@ -752,6 +786,7 @@ export function setup(ctx: SpindleFrontendContext) {
   }
 
   const syncVisibility = () => {
+    ensureWrapperMount()
     const inputAnchor = findInputAnchor()
     const mobile = isMobileViewport(ruler)
     const activeChat = isChatRoute() || (inputAnchor !== null && looksLikeMobileChatScreen())
