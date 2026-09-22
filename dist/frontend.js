@@ -586,7 +586,9 @@ export function setup(ctx) {
     let activePointerId = null;
     let startY = 0;
     let startHeight = 0;
-    let gestureMoved = false;
+    let tapPointerId = null;
+    let tapStartY = 0;
+    let tapMoved = false;
     let lastTapAt = 0;
     let lastBottomAnchor = initialBottom;
     let syncFrame = 0;
@@ -681,7 +683,6 @@ export function setup(ctx) {
         ruler.dataset.dragging = 'true';
         startY = clientY;
         startHeight = ruler.getBoundingClientRect().height || initialHeight;
-        gestureMoved = false;
         if ('pointerId' in event) {
             activePointerId = event.pointerId;
             try {
@@ -702,17 +703,12 @@ export function setup(ctx) {
         if (clientY === null)
             return;
         const delta = startY - clientY;
-        if (Math.abs(delta) > TAP_MOVE_TOLERANCE)
-            gestureMoved = true;
         applyHeight(startHeight + delta);
         event.preventDefault();
     };
     const endDrag = (event) => {
         if ('pointerId' in (event || {}) && activePointerId !== null && event.pointerId !== activePointerId)
             return;
-        const endY = event ? getClientY(event) : null;
-        const cancelled = event?.type === 'pointercancel' || event?.type === 'touchcancel';
-        const moved = gestureMoved || (endY !== null && Math.abs(startY - endY) > TAP_MOVE_TOLERANCE);
         if (event && 'pointerId' in event) {
             try {
                 if (handle.hasPointerCapture(event.pointerId))
@@ -725,20 +721,56 @@ export function setup(ctx) {
         dragging = false;
         activePointerId = null;
         ruler.dataset.dragging = 'false';
-        if (event && !cancelled && !moved) {
-            const now = performance.now();
-            if (lastTapAt > 0 && now - lastTapAt <= DOUBLE_TAP_WINDOW_MS) {
-                lastTapAt = 0;
-                applyHeight(minHeight(ruler));
-            }
-            else {
-                lastTapAt = now;
-            }
-        }
-        else {
-            lastTapAt = 0;
-        }
         scheduleSync();
+    };
+    const collapseToMinimum = () => {
+        lastTapAt = 0;
+        applyHeight(minHeight(ruler));
+        scheduleSync();
+    };
+    const registerCleanTap = () => {
+        const now = Date.now();
+        if (lastTapAt > 0 && now - lastTapAt <= DOUBLE_TAP_WINDOW_MS) {
+            collapseToMinimum();
+            return;
+        }
+        lastTapAt = now;
+    };
+    const onTapPointerDown = (event) => {
+        if (event.isPrimary === false)
+            return;
+        tapPointerId = event.pointerId;
+        tapStartY = event.clientY;
+        tapMoved = false;
+    };
+    const onTapPointerMove = (event) => {
+        if (tapPointerId === null || event.pointerId !== tapPointerId)
+            return;
+        if (Math.abs(event.clientY - tapStartY) > TAP_MOVE_TOLERANCE)
+            tapMoved = true;
+    };
+    const onTapPointerUp = (event) => {
+        if (tapPointerId === null || event.pointerId !== tapPointerId)
+            return;
+        const moved = tapMoved || Math.abs(event.clientY - tapStartY) > TAP_MOVE_TOLERANCE;
+        tapPointerId = null;
+        tapMoved = false;
+        if (moved) {
+            lastTapAt = 0;
+            return;
+        }
+        registerCleanTap();
+    };
+    const onTapPointerCancel = (event) => {
+        if (tapPointerId !== null && event.pointerId !== tapPointerId)
+            return;
+        tapPointerId = null;
+        tapMoved = false;
+        lastTapAt = 0;
+    };
+    const onHandleDoubleClick = (event) => {
+        event.preventDefault();
+        collapseToMinimum();
     };
     const onResize = () => {
         const inputAnchor = findInputAnchor();
@@ -796,6 +828,12 @@ export function setup(ctx) {
         window.addEventListener('pointermove', continueDrag, { passive: false });
         window.addEventListener('pointerup', endDrag, { passive: false });
         window.addEventListener('pointercancel', endDrag, { passive: false });
+        // Observe taps independently from the resize lifecycle. Keeping these listeners
+        // separate means the original drag/mount/visibility path remains untouched.
+        handle.addEventListener('pointerdown', onTapPointerDown, { passive: true });
+        window.addEventListener('pointermove', onTapPointerMove, { passive: true });
+        window.addEventListener('pointerup', onTapPointerUp, { passive: true });
+        window.addEventListener('pointercancel', onTapPointerCancel, { passive: true });
     }
     else {
         handle.addEventListener('mousedown', beginDrag, { passive: false });
@@ -806,6 +844,7 @@ export function setup(ctx) {
         window.addEventListener('touchend', endDrag, { passive: false });
         window.addEventListener('touchcancel', endDrag, { passive: false });
     }
+    handle.addEventListener('dblclick', onHandleDoubleClick, { passive: false });
     window.addEventListener('resize', onResize);
     window.addEventListener('orientationchange', onResize);
     window.addEventListener('popstate', scheduleSync);
@@ -821,6 +860,10 @@ export function setup(ctx) {
             window.removeEventListener('pointermove', continueDrag);
             window.removeEventListener('pointerup', endDrag);
             window.removeEventListener('pointercancel', endDrag);
+            handle.removeEventListener('pointerdown', onTapPointerDown);
+            window.removeEventListener('pointermove', onTapPointerMove);
+            window.removeEventListener('pointerup', onTapPointerUp);
+            window.removeEventListener('pointercancel', onTapPointerCancel);
         }
         else {
             handle.removeEventListener('mousedown', beginDrag);
@@ -831,6 +874,7 @@ export function setup(ctx) {
             window.removeEventListener('touchend', endDrag);
             window.removeEventListener('touchcancel', endDrag);
         }
+        handle.removeEventListener('dblclick', onHandleDoubleClick);
         window.removeEventListener('resize', onResize);
         window.removeEventListener('orientationchange', onResize);
         window.removeEventListener('popstate', scheduleSync);

@@ -119,17 +119,17 @@ class FakeStorage {
 class FakeWindow extends EventTarget {}
 
 const fakeWindow = new FakeWindow()
-fakeWindow.innerWidth = 390
-fakeWindow.innerHeight = 800
+fakeWindow.innerWidth = 1130
+fakeWindow.innerHeight = 1038
 fakeWindow.location = { pathname: '/chat/test', hash: '', search: '' }
 fakeWindow.localStorage = new FakeStorage()
 fakeWindow.PointerEvent = class PointerEvent {}
 fakeWindow.setInterval = setInterval
 fakeWindow.clearInterval = clearInterval
 
-const body = new FakeElement('body', { left: 0, top: 0, right: 390, bottom: 800, width: 390, height: 800 })
-const root = new FakeElement('html', { left: 0, top: 0, right: 390, bottom: 800, width: 390, height: 800 })
-const input = new FakeElement('div', { left: 10, top: 700, right: 380, bottom: 780, width: 370, height: 80 })
+const body = new FakeElement('body', { left: 0, top: 0, right: 1130, bottom: 1038, width: 1130, height: 1038 })
+const root = new FakeElement('html', { left: 0, top: 0, right: 1130, bottom: 1038, width: 1130, height: 1038 })
+const input = new FakeElement('div', { left: 28, top: 939, right: 1113, bottom: 1034, width: 1085, height: 95 })
 input.setAttribute('data-component', 'InputArea')
 input.className = 'input-area'
 input.parentElement = body
@@ -206,7 +206,7 @@ const ctx = {
       ruler = new FakeElement('div', { height: 180 })
       ruler.id = 'lumi-reading-ruler'
       ruler.parentElement = body
-      handle = new FakeElement('button', { left: 0, top: 590, right: 390, bottom: 648, width: 390, height: 58 })
+      handle = new FakeElement('button', { left: 28, top: 700, right: 1113, bottom: 758, width: 1085, height: 58 })
       handle.className = 'reading-ruler-handle'
       ruler.append(handle)
       return ruler
@@ -219,6 +219,7 @@ const ctx = {
 
 const cleanup = setup(ctx)
 
+assert.equal(ruler.dataset.active, 'true', 'ruler should mount active on a normal chat route')
 assert.equal(ruler.style.height, '180px', 'saved height should be restored before gesture tests')
 
 handle.dispatchEvent(pointerEvent('pointerdown', 500))

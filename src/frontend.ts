@@ -696,7 +696,9 @@ export function setup(ctx: SpindleFrontendContext) {
   let activePointerId: number | null = null
   let startY = 0
   let startHeight = 0
-  let gestureMoved = false
+  let tapPointerId: number | null = null
+  let tapStartY = 0
+  let tapMoved = false
   let lastTapAt = 0
   let lastBottomAnchor = initialBottom
   let syncFrame = 0
@@ -800,7 +802,6 @@ export function setup(ctx: SpindleFrontendContext) {
     ruler.dataset.dragging = 'true'
     startY = clientY
     startHeight = ruler.getBoundingClientRect().height || initialHeight
-    gestureMoved = false
 
     if ('pointerId' in event) {
       activePointerId = event.pointerId
@@ -822,17 +823,12 @@ export function setup(ctx: SpindleFrontendContext) {
     if (clientY === null) return
 
     const delta = startY - clientY
-    if (Math.abs(delta) > TAP_MOVE_TOLERANCE) gestureMoved = true
     applyHeight(startHeight + delta)
     event.preventDefault()
   }
 
   const endDrag = (event?: DragPoint) => {
     if ('pointerId' in (event || {}) && activePointerId !== null && (event as PointerEvent).pointerId !== activePointerId) return
-
-    const endY = event ? getClientY(event) : null
-    const cancelled = event?.type === 'pointercancel' || event?.type === 'touchcancel'
-    const moved = gestureMoved || (endY !== null && Math.abs(startY - endY) > TAP_MOVE_TOLERANCE)
 
     if (event && 'pointerId' in event) {
       try {
@@ -845,20 +841,61 @@ export function setup(ctx: SpindleFrontendContext) {
     dragging = false
     activePointerId = null
     ruler.dataset.dragging = 'false'
+    scheduleSync()
+  }
 
-    if (event && !cancelled && !moved) {
-      const now = performance.now()
-      if (lastTapAt > 0 && now - lastTapAt <= DOUBLE_TAP_WINDOW_MS) {
-        lastTapAt = 0
-        applyHeight(minHeight(ruler))
-      } else {
-        lastTapAt = now
-      }
-    } else {
+  const collapseToMinimum = () => {
+    lastTapAt = 0
+    applyHeight(minHeight(ruler))
+    scheduleSync()
+  }
+
+  const registerCleanTap = () => {
+    const now = Date.now()
+    if (lastTapAt > 0 && now - lastTapAt <= DOUBLE_TAP_WINDOW_MS) {
+      collapseToMinimum()
+      return
+    }
+    lastTapAt = now
+  }
+
+  const onTapPointerDown = (event: PointerEvent) => {
+    if (event.isPrimary === false) return
+    tapPointerId = event.pointerId
+    tapStartY = event.clientY
+    tapMoved = false
+  }
+
+  const onTapPointerMove = (event: PointerEvent) => {
+    if (tapPointerId === null || event.pointerId !== tapPointerId) return
+    if (Math.abs(event.clientY - tapStartY) > TAP_MOVE_TOLERANCE) tapMoved = true
+  }
+
+  const onTapPointerUp = (event: PointerEvent) => {
+    if (tapPointerId === null || event.pointerId !== tapPointerId) return
+
+    const moved = tapMoved || Math.abs(event.clientY - tapStartY) > TAP_MOVE_TOLERANCE
+    tapPointerId = null
+    tapMoved = false
+
+    if (moved) {
       lastTapAt = 0
+      return
     }
 
-    scheduleSync()
+    registerCleanTap()
+  }
+
+  const onTapPointerCancel = (event: PointerEvent) => {
+    if (tapPointerId !== null && event.pointerId !== tapPointerId) return
+    tapPointerId = null
+    tapMoved = false
+    lastTapAt = 0
+  }
+
+  const onHandleDoubleClick = (event: MouseEvent) => {
+    event.preventDefault()
+    collapseToMinimum()
   }
 
   const onResize = () => {
@@ -920,6 +957,13 @@ export function setup(ctx: SpindleFrontendContext) {
     window.addEventListener('pointermove', continueDrag as EventListener, { passive: false })
     window.addEventListener('pointerup', endDrag as EventListener, { passive: false })
     window.addEventListener('pointercancel', endDrag as EventListener, { passive: false })
+
+    // Observe taps independently from the resize lifecycle. Keeping these listeners
+    // separate means the original drag/mount/visibility path remains untouched.
+    handle.addEventListener('pointerdown', onTapPointerDown as EventListener, { passive: true })
+    window.addEventListener('pointermove', onTapPointerMove as EventListener, { passive: true })
+    window.addEventListener('pointerup', onTapPointerUp as EventListener, { passive: true })
+    window.addEventListener('pointercancel', onTapPointerCancel as EventListener, { passive: true })
   } else {
     handle.addEventListener('mousedown', beginDrag as EventListener, { passive: false })
     window.addEventListener('mousemove', continueDrag as EventListener, { passive: false })
@@ -930,6 +974,8 @@ export function setup(ctx: SpindleFrontendContext) {
     window.addEventListener('touchend', endDrag as EventListener, { passive: false })
     window.addEventListener('touchcancel', endDrag as EventListener, { passive: false })
   }
+
+  handle.addEventListener('dblclick', onHandleDoubleClick as EventListener, { passive: false })
 
   window.addEventListener('resize', onResize)
   window.addEventListener('orientationchange', onResize)
@@ -949,6 +995,11 @@ export function setup(ctx: SpindleFrontendContext) {
       window.removeEventListener('pointermove', continueDrag as EventListener)
       window.removeEventListener('pointerup', endDrag as EventListener)
       window.removeEventListener('pointercancel', endDrag as EventListener)
+
+      handle.removeEventListener('pointerdown', onTapPointerDown as EventListener)
+      window.removeEventListener('pointermove', onTapPointerMove as EventListener)
+      window.removeEventListener('pointerup', onTapPointerUp as EventListener)
+      window.removeEventListener('pointercancel', onTapPointerCancel as EventListener)
     } else {
       handle.removeEventListener('mousedown', beginDrag as EventListener)
       window.removeEventListener('mousemove', continueDrag as EventListener)
@@ -959,6 +1010,8 @@ export function setup(ctx: SpindleFrontendContext) {
       window.removeEventListener('touchend', endDrag as EventListener)
       window.removeEventListener('touchcancel', endDrag as EventListener)
     }
+
+    handle.removeEventListener('dblclick', onHandleDoubleClick as EventListener)
 
     window.removeEventListener('resize', onResize)
     window.removeEventListener('orientationchange', onResize)
